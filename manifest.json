@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Fake AI voice detector",
+  "version": "1.0",
+  "description": "Captures audio from the current tab and downloads it as an MP3 file.",
+  "icons": {
+    "128": "./images/icon.png"
+  },
+  "action": {
+    "default_popup": "./popup/popup.html",
+    "default_icon": "./images/icon.png"
+  },
+  "permissions": [
+    "tabCapture",
+    "activeTab",
+    "scripting",
+    "downloads",
+    "offscreen"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
