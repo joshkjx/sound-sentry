@@ -1,7 +1,11 @@
 let recordingTabId = null;
 let OFFSCREEN_DOC = "./offscreen/offscreen.html";
 
-// Create the offscreen document
+/**
+ * Create the offscreen document
+ *
+ * @param {String} path - the url to use to create the offsreen document
+ */
 async function setupOffscreenDocument(path) {
   const offscreenUrl = chrome.runtime.getURL(path);
   const existingContexts = await chrome.runtime.getContexts({
@@ -27,7 +31,7 @@ async function closeOffscreenDocument(path) {
   });
 
   if (existingContexts.length) {
-    await chrome.offscreen.closeDocument();
+    await chrome.offscreen.closeDocument().catch(() => {});
   }
 }
 
@@ -37,7 +41,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'startRecording') {
     (async () => {
 
-      await setupOffscreenDocument(OFFSCREEN_DOC);
+      await setupOffscreenDocument(OFFSCREEN_DOC).catch(() => {});
       
       // Store the ID of the tab being recorded
       recordingTabId = message.tabId;
@@ -74,9 +78,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
 
       recordingTabId = null;
-      await closeOffscreenDocument(OFFSCREEN_DOC);
+      await closeOffscreenDocument(OFFSCREEN_DOC).catch(() => {});
 
-      chrome.runtime.sendMessage({ action: 'recordingStopped' });
+      const response = await chrome.runtime.sendMessage({ action: 'recordingStopped' });
+      console.log(response);
     })();
     return true;
   }
@@ -104,9 +109,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   else if (message.action === 'recordingStopped') {
     (async () => {
       recordingTabId = null;
-      await closeOffscreenDocument(OFFSCREEN_DOC);
+      await closeOffscreenDocument(OFFSCREEN_DOC).catch(() => {});
       // Forward the message to the popup for UI update
-      chrome.runtime.sendMessage(message); 
+      const response = await chrome.runtime.sendMessage(message);
+      console.log(response)
     })();
     return true;
   }
@@ -124,7 +130,8 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
       // The offscreen document might already be closed if recording was stopped gracefully.
     }
     recordingTabId = null;
-    await closeOffscreenDocument(OFFSCREEN_DOC);
-    chrome.runtime.sendMessage({ action: 'recordingStopped', error: 'Tab closed.' });
+    await closeOffscreenDocument(OFFSCREEN_DOC).catch(() => {});
+    const response = await chrome.runtime.sendMessage({ action: 'recordingStopped', error: 'Tab closed.' });
+    console.log(response)
   }
 });
