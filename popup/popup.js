@@ -45,11 +45,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --- Stop Recording ---
-  stopButton.addEventListener('click', () => {
+  stopButton.addEventListener('click', async () => {
     if (!isRecording) return;
     statusDiv.textContent = 'Stopping and Downloading...';
 
-    chrome.runtime.sendMessage({ action: 'stopRecording' }, (response) => {
+    await chrome.runtime.sendMessage({ action: 'stopRecording' }, (response) => {
       if (response && response.success) {
         isRecording = false;
         updateUI();

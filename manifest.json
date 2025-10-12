@@ -11,12 +11,15 @@
     "default_icon": "./images/icon.png"
   },
   "permissions": [
-    "tabCapture",
     "activeTab",
     "scripting",
     "downloads",
     "offscreen"
   ],
+  "content_scripts": [{
+    "matches": ["*://*.youtube.com/*"],
+    "js": ["content.js"]
+  }],
   "background": {
     "service_worker": "background.js"
   }
