@@ -265,13 +265,14 @@ class AudioCapture {
             const mimeType: string = 'audio/wav'
             this.mediaRecorder = new MediaRecorder(this.mediaStream, {
                 mimeType: mimeType,
-                audioBitsPerSecond: 128000 // 128kbps - good quality for ASR
+                audioBitsPerSecond: 128000 // 128kbps - random number I chose for now
             });
 
             this.recordingStartTime = Date.now();
             this.chunkCount = 0;
 
-            this.mediaRecorder.ondataavailable = (event: BlobEvent) => {
+            this.mediaRecorder.ondataavailable = (event: BlobEvent) => { //The dataavailable event fires each time timeslice ms of media has been recorded.
+                                                                               // The event is typed BlobEvent and contains the recorded media in data property
                 this.handleAudioChunk(event.data);
             };
 
@@ -282,7 +283,7 @@ class AudioCapture {
 
             // Start recording with timeslice
             // Smaller timeslice = lower latency, more frequent chunks
-            const CHUNK_DURATION_MS = 1000; // chunk duration in ms - this is 1 second for now
+            const CHUNK_DURATION_MS = 3000; // chunk duration in ms - this is 3 seconds for now. Each blob will contain 3s of audio data
             this.mediaRecorder.start(CHUNK_DURATION_MS);
 
             this.currentVideo = videoElement;
@@ -321,6 +322,7 @@ class AudioCapture {
     // AUDIO CHUNK HANDLING
     // ============================================
 
+    // Function to process each blob of 3s recorded data
     private handleAudioChunk(blob: Blob): void {
         if (blob.size === 0) {
             console.warn('Received empty audio chunk');
@@ -333,7 +335,7 @@ class AudioCapture {
 
         console.log(`Audio chunk ${this.chunkCount}: ${blob.size} bytes, ${blob.type}`);
 
-        if (this.port) {
+        if (this.port) { //sends chunk to service worker
             this.port.postMessage({
                 type: 'AUDIO_CHUNK',
                 blob: blob,
