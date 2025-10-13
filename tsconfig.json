@@ -3,5 +3,8 @@
     "target": "es2020",
     "lib": ["ES2024","DOM","DOM.Iterable"],
     "types": ["chrome"]
-  }
+  },
+  "include": [
+    "*.ts"
+  ]
 }
