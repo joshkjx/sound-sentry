@@ -2,16 +2,6 @@
 // TYPE AUGMENTATION FOR MISSING BROWSER API
 // ============================================
 
-declare global {
-    interface HTMLMediaElement { // This parent class is inherited by HTMLVideoElement,
-        // but somehow TS doesn't recognise the captureStream() method despite the DOM supporting it.
-        captureStream(): MediaStream;
-    }
-}
-
-// This export is required for the augmentation to work
-export {};
-
 
 // ============================================
 // TYPE DEFINITIONS
@@ -210,6 +200,7 @@ class AudioCapture {
 
         videoElement.addEventListener('play', () =>{
             if (this.isTabActive){
+                console.log("Play Event Received");
                 this.startCapture(videoElement);
             }
         });
@@ -237,28 +228,30 @@ class AudioCapture {
     // ============================================
 
     private startCapture(videoElement: HTMLVideoElement): void {
-        //don't capture if inactive tab
-        if (!this.isTabActive){
-            return;
-        }
-        //do nothing if video already being captured
-        if (this.isCapturing && this.currentVideo === videoElement){
-            return;
-        }
-        //stop capture if it's a different video from the one currently being captured
-        if (this.isCapturing && this.currentVideo !== videoElement){
+        if (!this.isTabActive) return;
+        if (this.isCapturing && this.currentVideo === videoElement) return;
+        if (this.isCapturing && this.currentVideo !== videoElement) {
             this.stopCapture();
         }
 
-        //Safety check to make sure capture method is supported by browser
         if (!('captureStream' in videoElement)) {
             console.error('captureStream not supported in this browser');
             return;
         }
-
-        try{
             // capture stream from videoElement (inbuilt method for the class)
             this.mediaStream = videoElement.captureStream();
+
+            // CHECK: Verify we have audio tracks
+            const audioTracks = this.mediaStream.getAudioTracks();
+
+            if (audioTracks.length === 0) {
+                console.error('No audio tracks available in the captured stream');
+                console.log('Video muted:', videoElement.muted);
+                console.log('Video has audio:', !!(videoElement as any).audioTracks?.length);
+                return;
+            }
+
+            console.log(`Captured ${audioTracks.length} audio track(s)`);
 
             //create audio context and analyser (analyser is implicit to AudioContext class)
             if (!window.MediaRecorder){
@@ -266,9 +259,7 @@ class AudioCapture {
                 return;
             }
 
-            const mimeType: string = 'audio/wav'
             this.mediaRecorder = new MediaRecorder(this.mediaStream, {
-                mimeType: mimeType,
                 audioBitsPerSecond: 128000 // 128kbps - random number I chose for now
             });
 
@@ -293,12 +284,17 @@ class AudioCapture {
             this.currentVideo = videoElement;
             this.isCapturing = true;
 
-            console.log(`Audio Capture Started, Format = (${mimeType}, ${CHUNK_DURATION_MS}ms chunks`);
+            console.log(`Audio Capture Started, Format = (${CHUNK_DURATION_MS}ms chunks)`);
 
         } catch (error) {
             console.error('Failed to start capture: ', error);
+            console.error('Error details:', {
+                name: (error as Error).name,
+                message: (error as Error).message,
+                stack: (error as Error).stack
+            });
         }
-    }
+
 
     private stopCapture(clearState: boolean = true): void {
         this.isCapturing = false;
@@ -340,6 +336,7 @@ class AudioCapture {
         console.log(`Audio chunk ${this.chunkCount}: ${blob.size} bytes, ${blob.type}`);
 
         if (this.port) { //sends chunk to service worker
+            console.log('Attempting to post to Service Worker...');
             this.port.postMessage({
                 type: 'AUDIO_CHUNK',
                 blob: blob,

@@ -1,7 +1,6 @@
 // ============================================
 // IMPORT TEST/MOCK CLASS
 // ============================================
-import { MockApiTest } from "./test_classes.js";
 
 
 // ============================================
@@ -28,10 +27,6 @@ interface ProcessingErrorMessage {
 
 type ContentScriptMessage = AudioChunkMessage;
 
-type ServiceWorkerMessage =
-    | ProcessedAudioMessage
-    | ProcessingErrorMessage;
-
 interface ProcessedAudioData {
     // Depends on API return format
     // TODO - fill in when API finalised
@@ -54,9 +49,12 @@ interface AudioMetadata {
 
 class AudioProcessor {
     private ports: Set<chrome.runtime.Port> = new Set();
+    private popupPorts: Set<chrome.runtime.Port> = new Set(); //Separate set for maintaining popup ports
 
     private testingUtil: MockApiTest;
     private testingMode: boolean = false;
+    private latestAudioData: ProcessedAudioData | null = null;
+    private latestAudioMetadata: AudioMetadata | null = null;
 
     constructor() {
         this.init();
@@ -77,13 +75,27 @@ class AudioProcessor {
     }
 
     private handlePortConnection(port: chrome.runtime.Port): void {
-        this.ports.add(port);
-        port.onDisconnect.addListener(() => {
-            this.handlePortDisconnection(port);
-        })
-        port.onMessage.addListener((message: ContentScriptMessage) => {
-            this.handleContentScriptMessage(message, port)
-        })
+        if (port.name === 'popup-connection'){
+            this.ports.add(port);
+            this.sendDataToPopup(port, {
+                type:'PROCESSED_AUDIO',
+                data: this.latestAudioData,
+                metadata: this.latestAudioMetadata
+            });
+
+        } else if (port.name === 'audio-capture') {
+            this.ports.add(port);
+            port.onDisconnect.addListener(() => {
+                this.handlePortDisconnection(port);
+            });
+            port.onMessage.addListener((message: ContentScriptMessage) => {
+                console.log("Received Message from content script...");
+                this.handleContentScriptMessage(message, port)
+            });
+        } else {
+            console.log("Unknown port, disconnecting...")
+            port.disconnect();
+        }
     }
 
     private handlePortDisconnection(port: chrome.runtime.Port): void {
@@ -112,21 +124,33 @@ class AudioProcessor {
         port: chrome.runtime.Port
     ): Promise<void> {
         try {
+            console.log('Service worker received audio chunk!');
             // Send audio data to API endpoint for processing
             const data = await this.sendToASRService(blob);
 
             // Build metadata for visualisation handling (maybe)
-            const metadata: AudioMetadata = {
+            this.latestAudioMetadata = {
                 framecount: 0, // TODO
                 duration: duration,
                 startTime: timestamp,
                 endTime: timestamp + duration
             };
-            this.sendProcessedAudio(port, data, metadata); // send audio back to content script on received port
+
+            this.setLatestData(data);
+
+            this.sendProcessedAudio(port, data, this.latestAudioMetadata); // send audio back to content script on received port
+
+            console.log('Broadcasting to popups...')
+            this.broadcastToPopups(this.latestAudioData, this.latestAudioMetadata);
+
         } catch (e) {
             const errorMsg = e instanceof Error ? e.message: String(e);
             this.sendProcessingError(port,errorMsg); // or send an error if failed.
         }
+    }
+
+    private setLatestData(data:ProcessedAudioData){
+        this.latestAudioData = data;
     }
 
     // ============================================
@@ -172,6 +196,23 @@ class AudioProcessor {
         });
     }
 
+    private sendDataToPopup(port:chrome.runtime.Port, message: ProcessedAudioMessage): void{
+
+        port.postMessage(message);
+    }
+
+    private broadcastToPopups(data:ProcessedAudioData, metadata: AudioMetadata): void{
+        this.popupPorts.forEach(port =>{
+            const message: ProcessedAudioMessage = {
+                type: "PROCESSED_AUDIO",
+                data: data,
+                metadata: metadata
+            }
+            console.log('sending data to popups... Data is ', message.type);
+            this.sendDataToPopup(port,message);
+        })
+    }
+
     // ============================================
     // TESTING UTILITIES
     // ============================================
@@ -189,6 +230,81 @@ class AudioProcessor {
         this.testingUtil.setConfig(testConfig);
     }
 
+}
+
+
+// ============================================
+// TEST CLASS
+// ============================================
+class MockApiTest{
+    private callCount: number = 0;
+    private lastBlob: Blob | null = null;
+    private responseConfig: string = "SUCCESS";
+    private availableConfigs: Array<string>;
+
+    constructor() {
+        this.availableConfigs = new Array<string>("SUCCESS", "ERROR", "TIMEOUT");
+
+    }
+
+
+    public getResponse(blob: Blob): Promise<ProcessedAudioData>{
+        return this.createResponse(blob)
+    }
+
+    public getAvailableConfigs(): Array<string> {
+        return this.availableConfigs;
+    }
+
+    public setConfig(config:string){
+        this.setConfigHandler(config);
+    }
+
+    private setConfigHandler(config:string) {
+        if (this.availableConfigs.includes(config)){
+            this.responseConfig = config;
+        } else {
+            return;
+        }
+    }
+
+    private createResponse(blob: Blob): Promise<ProcessedAudioData>{
+        this.lastBlob = blob
+        this.callCount++;
+        if (blob.size === 0){
+            return Promise.reject(new Error('empty blob'))
+        }
+        switch (this.responseConfig){
+            case "SUCCESS":
+                const successResponse: ProcessedAudioData =  this.createSuccessResponse(blob);
+                return Promise.resolve(successResponse);
+            case "ERROR":
+                const errorResponse: Error = this.createErrorResponse();
+                return Promise.reject(errorResponse);
+            case "TIMEOUT":
+                return new Promise((resolve,reject) => {
+                    setTimeout(() => reject(new Error('Timeout')),5000);
+                });
+            default:
+                break;
+        }
+
+    }
+
+    private createSuccessResponse(blob: Blob): ProcessedAudioData{
+        const randomNumber: number = Math.random();
+        const confidenceThreshold: number = 0.5;
+
+        return {
+            decision: randomNumber > confidenceThreshold ? "AI" : "Not AI",
+            confidence: randomNumber,
+            chunksReceivedCount: this.callCount
+        }
+    }
+
+    private createErrorResponse(): Error {
+        return new Error("Mock API Error Case");
+    }
 }
 
 // ============================================

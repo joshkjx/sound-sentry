@@ -1,8 +1,32 @@
-interface DisplayData {
-    chunksReceivedCount: number;
-    decision: string;
-    confidence: number;
+console.log("Popup Script initialised!");
+
+interface ProcessedAudioData {
+    // Depends on API return format
+    // TODO - fill in when API finalised
+    // current fields are placeholders for mocking
+    decision: string,
+    confidence: number,
+    chunksReceivedCount: number
 }
+
+interface AudioMetadata {
+    framecount: number;
+    duration: number;
+    startTime: number;
+    endTime: number;
+}
+
+interface ProcessedAudioMessage {
+    type: 'PROCESSED_AUDIO';
+    data: ProcessedAudioData;
+    metadata: AudioMetadata;
+}
+
+interface ProcessingErrorMessage {
+    type: 'PROCESSING_ERROR';
+    error: string;
+}
+
 
 class PopupController {
     private port: chrome.runtime.Port | null = null;
@@ -13,19 +37,43 @@ class PopupController {
 
     private init(): void {
         this.setupServiceWorkerConnection();
-        this.requestCurrentData();
+        // this.requestCurrentData();
     }
 
     private setupServiceWorkerConnection(): void {
-        // Connect to service worker via port
-        // Listen for data updates
+        this.port = chrome.runtime.connect({name: 'popup-connection'});
+        this.port.onMessage.addListener((message: ServiceWorkerMessage ) =>{
+            if (!message){
+                console.warn('Received null/undefined message');
+            }
+
+            if (!message.type) {
+                console.warn('Received message without type:', message);
+            }
+            this.handleServiceWorkerMessage(message)
+        })
+        this.port.onDisconnect.addListener(() =>{
+            console.log('port between service worker and popup disconnected.')
+            this.port = null;
+        })
     }
 
-    private requestCurrentData(): void {
-        // Send message to service worker requesting latest data
+    private handleServiceWorkerMessage(message: ServiceWorkerMessage){
+        let messageData : ProcessedAudioData;
+        if (message && message.type === "PROCESSED_AUDIO"){
+            messageData = message.data;
+            this.handleDataUpdate(messageData);
+        } else {
+            const fallback:ProcessedAudioData = {
+                chunksReceivedCount:0,
+                decision: "Not Applicable",
+                confidence: 0.00
+            }
+            this.handleDataUpdate(fallback)
+        }
     }
 
-    private handleDataUpdate(data: DisplayData): void {
+    private handleDataUpdate(data: ProcessedAudioData): void {
         // Update DOM elements with new data
         this.updateChunkCount(data.chunksReceivedCount);
         this.updateDecision(data.decision);
@@ -47,5 +95,6 @@ class PopupController {
         if (element) element.textContent = confidence.toString();
     }
 }
+
 
 new PopupController();

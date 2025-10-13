@@ -5,6 +5,6 @@
     "types": ["chrome"]
   },
   "include": [
-    "*.ts"
+    "**/*.ts"
   ]
 }
