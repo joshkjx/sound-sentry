@@ -1,12 +1,14 @@
 // ============================================
-// TYPE DEFINITIONS
+// IMPORT TEST/MOCK CLASS
 // ============================================
+import { MockApiTest } from "./test_classes";
 // ============================================
 // MAIN CLASS
 // ============================================
 class AudioProcessor {
     constructor() {
         this.ports = new Set();
+        this.testingMode = false;
         this.init();
     }
     init() {
@@ -67,6 +69,9 @@ class AudioProcessor {
         // TODO: Convert blob to format needed by API
         // TODO: Make HTTP request to ASR endpoint
         // TODO: Parse and return response
+        if (this.testingMode) { // Uses Mock Api if testing mode, otherwise falls back to API gateway.
+            return this.testingUtil.getResponse(blob);
+        }
         throw new Error('Not implemented');
     }
     // ============================================
@@ -85,8 +90,22 @@ class AudioProcessor {
             error: error
         });
     }
+    // ============================================
+    // TESTING UTILITIES
+    // ============================================
+    activateTestMode(testMode = false, testConfig) {
+        this.testingMode = testMode;
+        if (!testMode) { // Defensive, early exit if not testing
+            this.testingMode = false;
+            return;
+        }
+        this.testingUtil = new MockApiTest();
+        this.testingUtil.setConfig(testConfig);
+    }
 }
 // ============================================
 // INITIALIZATION
 // ============================================
-new AudioProcessor();
+const processor = new AudioProcessor();
+// Comment out below line if not testing with mock API
+processor.activateTestMode(true, "SUCCESS");

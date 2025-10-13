@@ -1,4 +1,10 @@
 // ============================================
+// IMPORT TEST/MOCK CLASS
+// ============================================
+import { MockApiTest } from "./test_classes";
+
+
+// ============================================
 // TYPE DEFINITIONS
 // ============================================
 
@@ -29,6 +35,10 @@ type ServiceWorkerMessage =
 interface ProcessedAudioData {
     // Depends on API return format
     // TODO - fill in when API finalised
+    // current fields are placeholders for mocking
+    decision: string,
+    confidence: number,
+    chunksReceivedCount: number
 }
 
 interface AudioMetadata {
@@ -44,6 +54,9 @@ interface AudioMetadata {
 
 class AudioProcessor {
     private ports: Set<chrome.runtime.Port> = new Set();
+
+    private testingUtil: MockApiTest;
+    private testingMode: boolean = false;
 
     constructor() {
         this.init();
@@ -120,10 +133,16 @@ class AudioProcessor {
     // API COMMUNICATION
     // ============================================
 
+
     private async sendToASRService(blob: Blob): Promise<ProcessedAudioData> {
         // TODO: Convert blob to format needed by API
         // TODO: Make HTTP request to ASR endpoint
         // TODO: Parse and return response
+
+        if (this.testingMode){ // Uses Mock Api if testing mode, otherwise falls back to API gateway.
+            return this.testingUtil.getResponse(blob);
+        }
+
         throw new Error('Not implemented');
     }
 
@@ -152,10 +171,31 @@ class AudioProcessor {
             error: error
         });
     }
+
+    // ============================================
+    // TESTING UTILITIES
+    // ============================================
+
+    public activateTestMode(testMode: boolean = false,
+                            testConfig: string) : void {
+        this.testingMode = testMode
+
+        if (!testMode) { // Defensive, early exit if not testing
+            this.testingMode = false;
+            return;
+        }
+
+        this.testingUtil = new MockApiTest();
+        this.testingUtil.setConfig(testConfig);
+    }
+
 }
 
 // ============================================
 // INITIALIZATION
 // ============================================
 
-new AudioProcessor();
+const processor = new AudioProcessor();
+
+// Comment out below line if not testing with mock API
+processor.activateTestMode(true,"SUCCESS")
