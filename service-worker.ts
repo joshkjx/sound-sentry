@@ -76,12 +76,16 @@ class AudioProcessor {
 
     private handlePortConnection(port: chrome.runtime.Port): void {
         if (port.name === 'popup-connection'){
-            this.ports.add(port);
+            console.log('Successfully connected to popups')
+            this.popupPorts.add(port);
             this.sendDataToPopup(port, {
                 type:'PROCESSED_AUDIO',
                 data: this.latestAudioData,
                 metadata: this.latestAudioMetadata
             });
+            port.onDisconnect.addListener(() => {
+                this.handlePopupPortDisconnection(port)
+            })
 
         } else if (port.name === 'audio-capture') {
             this.ports.add(port);
@@ -97,6 +101,11 @@ class AudioProcessor {
             port.disconnect();
         }
     }
+
+    private handlePopupPortDisconnection(port: chrome.runtime.Port): void {
+        this.popupPorts.delete(port);
+    }
+
 
     private handlePortDisconnection(port: chrome.runtime.Port): void {
         this.ports.delete(port);
@@ -202,6 +211,11 @@ class AudioProcessor {
     }
 
     private broadcastToPopups(data:ProcessedAudioData, metadata: AudioMetadata): void{
+        console.log("number of popup ports is: ", this.popupPorts.size);
+        if (this.popupPorts.size === 0) {
+            return;
+        }
+
         this.popupPorts.forEach(port =>{
             const message: ProcessedAudioMessage = {
                 type: "PROCESSED_AUDIO",

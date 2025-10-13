@@ -26,11 +26,15 @@ class AudioProcessor {
     }
     handlePortConnection(port) {
         if (port.name === 'popup-connection') {
-            this.ports.add(port);
+            console.log('Successfully connected to popups');
+            this.popupPorts.add(port);
             this.sendDataToPopup(port, {
                 type: 'PROCESSED_AUDIO',
                 data: this.latestAudioData,
                 metadata: this.latestAudioMetadata
+            });
+            port.onDisconnect.addListener(() => {
+                this.handlePopupPortDisconnection(port);
             });
         }
         else if (port.name === 'audio-capture') {
@@ -47,6 +51,9 @@ class AudioProcessor {
             console.log("Unknown port, disconnecting...");
             port.disconnect();
         }
+    }
+    handlePopupPortDisconnection(port) {
+        this.popupPorts.delete(port);
     }
     handlePortDisconnection(port) {
         this.ports.delete(port);
@@ -118,6 +125,10 @@ class AudioProcessor {
         port.postMessage(message);
     }
     broadcastToPopups(data, metadata) {
+        console.log("number of popup ports is: ", this.popupPorts.size);
+        if (this.popupPorts.size === 0) {
+            return;
+        }
         this.popupPorts.forEach(port => {
             const message = {
                 type: "PROCESSED_AUDIO",

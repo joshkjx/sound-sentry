@@ -17,6 +17,7 @@ class PopupController {
             if (!message.type) {
                 console.warn('Received message without type:', message);
             }
+            console.warn('🔔 MESSAGE RECEIVED IN POPUP:', message.type);
             this.handleServiceWorkerMessage(message);
         });
         this.port.onDisconnect.addListener(() => {
