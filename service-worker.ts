@@ -1,7 +1,7 @@
 // ============================================
 // IMPORT TEST/MOCK CLASS
 // ============================================
-import { MockApiTest } from "./test_classes";
+import { MockApiTest } from "./test_classes.js";
 
 
 // ============================================
