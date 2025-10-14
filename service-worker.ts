@@ -1,9 +1,4 @@
 // ============================================
-// IMPORT TEST/MOCK CLASS
-// ============================================
-
-
-// ============================================
 // TYPE DEFINITIONS
 // ============================================
 
@@ -12,6 +7,8 @@ interface AudioChunkMessage {
     blob: Blob;
     timestamp: number;
     duration: number;
+    videoUrl?: string;
+    videoTitle?: string;
 }
 
 interface ProcessedAudioMessage {
@@ -23,6 +20,20 @@ interface ProcessedAudioMessage {
 interface ProcessingErrorMessage {
     type: 'PROCESSING_ERROR';
     error: string;
+}
+
+interface ProcessedAudioRecord{
+    timestamp: number;
+    confidence: number;
+    decision: string;
+    videoUrl?: string;
+    videoTitle?: string;
+}
+
+interface RecordingSessionData{
+    results: Array<ProcessedAudioRecord>;
+    sessionStartTime: number;
+    totalChunksProcessed: number;
 }
 
 type ContentScriptMessage = AudioChunkMessage;
@@ -55,6 +66,10 @@ class AudioProcessor {
     private testingMode: boolean = false;
     private latestAudioData: ProcessedAudioData | null = null;
     private latestAudioMetadata: AudioMetadata | null = null;
+
+    private currentRecordingSessionChunksProcessed: number = 0;
+    private currentRecordingSessionStartTime: number;
+    private currentRecordingSessionRecords: Array<ProcessedAudioRecord>;
 
     constructor() {
         this.init();
@@ -89,13 +104,17 @@ class AudioProcessor {
 
         } else if (port.name === 'audio-capture') {
             this.ports.add(port);
+            this.currentRecordingSessionStartTime = Date.now();
+
             port.onDisconnect.addListener(() => {
                 this.handlePortDisconnection(port);
             });
+
             port.onMessage.addListener((message: ContentScriptMessage) => {
                 console.log("Received Message from content script...");
                 this.handleContentScriptMessage(message, port)
             });
+
         } else {
             console.log("Unknown port, disconnecting...")
             port.disconnect();
@@ -109,6 +128,15 @@ class AudioProcessor {
 
     private handlePortDisconnection(port: chrome.runtime.Port): void {
         this.ports.delete(port);
+        this.cleanUpOnDisconnect();
+    }
+
+    private cleanUpOnDisconnect(): void {
+        this.currentRecordingSessionChunksProcessed = 0;
+        this.currentRecordingSessionRecords.length = 0; // TODO - check if this triggers a bug in the visualisation once that's up.
+        this.currentRecordingSessionStartTime = null;
+        this.latestAudioData = null;
+        this.latestAudioMetadata = null;
     }
 
     // ============================================
@@ -121,7 +149,7 @@ class AudioProcessor {
     ): void {
         switch (message.type) {
             case "AUDIO_CHUNK":
-                this.handleAudioChunk(message.blob, message.timestamp, message.duration, port);
+                this.handleAudioChunk(message.blob, message.timestamp, message.duration, message.videoTitle, message.videoUrl, port);
                 break;
         }
     }
@@ -130,6 +158,8 @@ class AudioProcessor {
         blob: Blob,
         timestamp: number,
         duration: number,
+        videoTitle: string,
+        videoUrl: string,
         port: chrome.runtime.Port
     ): Promise<void> {
         try {
@@ -138,14 +168,24 @@ class AudioProcessor {
             const data = await this.sendToASRService(blob);
 
             // Build metadata for visualisation handling (maybe)
-            this.latestAudioMetadata = {
+            const metadata = {
                 framecount: 0, // TODO
                 duration: duration,
                 startTime: timestamp,
                 endTime: timestamp + duration
             };
 
-            this.setLatestData(data);
+            let chunkVideoTitle: string | null = null;
+            let chunkVideoUrl: string | null = null;
+
+            if (videoTitle){
+                chunkVideoTitle = videoTitle;
+            }
+            if (videoUrl){
+                chunkVideoUrl = videoUrl;
+            }
+
+            this.setLatestData(data,metadata,chunkVideoTitle,chunkVideoUrl);
 
             this.sendProcessedAudio(port, data, this.latestAudioMetadata); // send audio back to content script on received port
 
@@ -158,8 +198,30 @@ class AudioProcessor {
         }
     }
 
-    private setLatestData(data:ProcessedAudioData){
+    // Creates a record of the latest data. We can use this later to save to session storage. TODO: need to think of how to do this efficiently. After every chunk is handled?
+    private setLatestData(data:ProcessedAudioData, metadata:AudioMetadata, chunkVideoTitle?: string | null, chunkVideoUrl?: string | null){
         this.latestAudioData = data;
+        this.latestAudioMetadata = metadata;
+        const currTime: number = Date.now();
+
+        this.currentRecordingSessionChunksProcessed++;
+        if (this.currentRecordingSessionChunksProcessed !== data.chunksReceivedCount){
+            console.warn('WARNING - chunks processed by service worker not equal to chunks received by API. Potential desync.')
+        }
+
+        let audioRecord: ProcessedAudioRecord = {
+            timestamp: currTime,
+            confidence: data.confidence,
+            decision: data.decision,
+        };
+        if (chunkVideoUrl){
+            audioRecord.videoUrl = chunkVideoUrl;
+        }
+        if (chunkVideoTitle){
+            audioRecord.videoTitle = chunkVideoTitle;
+        }
+        this.currentRecordingSessionRecords.push(audioRecord);
+
     }
 
     // ============================================
@@ -226,6 +288,29 @@ class AudioProcessor {
             this.sendDataToPopup(port,message);
         })
     }
+
+    // ============================================
+    // MISCELLANEOUS HELPER FUNCTIONS
+    // ============================================
+
+    // Helper function to retrieve session data, used for continuity and for longer-horizon visualisation beyond the last received chunk.
+    private getRecordingSessionData(): Array<ProcessedAudioRecord>{
+        return this.currentRecordingSessionRecords;
+    }
+
+    // Generates a unique session ID for session checking at the API side. No need to actually use this function if we find it unnecessary.
+    private generateRecordingSessionId(length: number = 8): string {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        const randomValues = new Uint8Array(length);
+        crypto.getRandomValues(randomValues);
+
+        for (let i = 0; i < length; i++) {
+            result += chars[randomValues[i] % chars.length];
+        }
+        return result;
+    }
+
 
     // ============================================
     // TESTING UTILITIES

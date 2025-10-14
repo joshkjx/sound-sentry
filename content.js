@@ -234,6 +234,7 @@ class AudioCapture {
         this.chunkCount++;
         const now = Date.now();
         const duration = now - this.recordingStartTime;
+        const metadata = this.getVideoMetadata();
         console.log(`Audio chunk ${this.chunkCount}: ${blob.size} bytes, ${blob.type}`);
         if (this.port) { //sends chunk to service worker
             console.log('Attempting to post to Service Worker...');
@@ -241,9 +242,18 @@ class AudioCapture {
                 type: 'AUDIO_CHUNK',
                 blob: blob,
                 timestamp: now,
-                duration: duration
+                duration: duration,
+                videoUrl: metadata.url,
+                videoTitle: metadata.title
             });
         }
+    }
+    // Helper function to get video title and url for more user-friendly experience
+    getVideoMetadata() {
+        return {
+            url: window.location.href,
+            title: document.title.replace(' - YouTube', '') // Clean up YouTube suffix
+        };
     }
     // ============================================
     // HANDLING OF PROCESSED DATA (PLACEHOLDER)

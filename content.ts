@@ -11,6 +11,8 @@ interface AudioChunkMessage {
     blob: Blob;
     timestamp: number;
     duration: number;
+    videoUrl?: string;
+    videotitle?: string;
 }
 
 interface ProcessedAudioMessage {
@@ -332,6 +334,7 @@ class AudioCapture {
         this.chunkCount++;
         const now = Date.now();
         const duration = now - this.recordingStartTime;
+        const metadata = this.getVideoMetadata();
 
         console.log(`Audio chunk ${this.chunkCount}: ${blob.size} bytes, ${blob.type}`);
 
@@ -341,9 +344,19 @@ class AudioCapture {
                 type: 'AUDIO_CHUNK',
                 blob: blob,
                 timestamp: now,
-                duration: duration
+                duration: duration,
+                videoUrl: metadata.url,
+                videoTitle: metadata.title
             });
         }
+    }
+
+    // Helper function to get video title and url for more user-friendly experience
+    private getVideoMetadata(): { url: string; title: string } {
+        return {
+            url: window.location.href,
+            title: document.title.replace(' - YouTube', '') // Clean up YouTube suffix
+        };
     }
 
     // ============================================
