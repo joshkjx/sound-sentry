@@ -12,6 +12,7 @@ class AudioProcessor {
         this.latestAudioData = null;
         this.latestAudioMetadata = null;
         this.currentRecordingSessionChunksProcessed = 0;
+        this.currentRecordingSessionRecords = [];
         this.init();
     }
     init() {
