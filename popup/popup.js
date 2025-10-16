@@ -41,9 +41,11 @@ class PopupController {
     }
     handleServiceWorkerMessage(message) {
         let messageData;
+        let messageMetadata;
         if (message && message.type === "PROCESSED_AUDIO") {
             messageData = message.data;
-            this.handleDataUpdate(messageData);
+            messageMetadata = message.metadata;
+            this.handleDataUpdate(messageData, messageMetadata);
         }
         else {
             const fallback = {
@@ -54,12 +56,18 @@ class PopupController {
             this.handleDataUpdate(fallback);
         }
     }
-    handleDataUpdate(data) {
+    handleDataUpdate(data, metadata) {
         // Update DOM elements with new data
+        this.updateTitle(metadata.videoTitle)
         this.updateChunkCount(data.chunksReceivedCount);
         this.updateDecision(data.decision);
         this.updateConfidence(data.confidence);
-        this.updateConfidenceChart(data);
+        this.updateConfidenceChart(data, metadata);
+    }
+    updateTitle(title) {
+        const element = document.getElementById('video-title');
+        if (element)
+            element.textContent = title.toString();
     }
     updateChunkCount(count) {
         const element = document.getElementById('chunk-count');
@@ -87,7 +95,7 @@ class PopupController {
                 animation: false, // disable animation for real-time updates
                 scales: {
                     x: {
-                        title: { display: true, text: 'Chunk Count' }
+                        title: { display: true, text: 'Playback time' }
                     },
                     y: {
                         title: { display: true, text: 'Confidence' },
@@ -99,18 +107,27 @@ class PopupController {
         });
     }
 
-    updateConfidenceChart(data) {
+    updateConfidenceChart(data, metadata) {
         if (!this.chartInstance) return;
 
-        const chunk = data.chunksReceivedCount;
+        // const chunk = data.chunksReceivedCount;
+
+        const playbackSeconds = metadata.playbackTimestamp
         const confidence = data.confidence;
 
+         // Format playback time into mm:ss
+        const minutes = Math.floor(playbackSeconds / 60);
+        const seconds = Math.floor(playbackSeconds % 60);
+        const formattedPlayback = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        this.chartData.labels.push(formattedPlayback);
+
         // Add the new point
-        this.chartData.labels.push(chunk);
+        // this.chartData.labels.push(chunk);
+        // this.chartData.labels.push(playbackTimestamp);
         this.chartData.datasets[0].data.push(confidence);
 
-        // Optional: limit chart length to 20 points
-        if (this.chartData.labels.length > 20) {
+        // Optional: limit chart length to 10 points
+        if (this.chartData.labels.length > 10) {
             this.chartData.labels.shift();
             this.chartData.datasets[0].data.shift();
         }
@@ -118,23 +135,6 @@ class PopupController {
         // Update the existing chart instance
         this.chartInstance.update();
     }
-    // updateConfidenceChart(data) {
-    //     const element = document.getElementById('confidence-chart');
-    //     if (element)
-    //         new Chart(element, {
-    //         type: 'line',
-    //         data: {
-    //             labels: ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange'],
-    //             datasets: [{
-    //                 label: 'Confidence level',
-    //                 data: [12, 19, 3, 5, 2, 3],
-    //                 borderWidth: 1,
-    //                 fill: true,
-    //                 borderColor: 'rgb(75, 192, 192)',
-    //                 tension: 0.1
-    //             }]
-    //         },
-    //     });
-    // }
+
 }
 new PopupController();

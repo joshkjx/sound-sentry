@@ -13,6 +13,7 @@ interface AudioChunkMessage {
     duration: number;
     videoUrl?: string;
     videotitle?: string;
+    playbackTimestamp?: string;
 }
 
 interface ProcessedAudioMessage {

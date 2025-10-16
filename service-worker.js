@@ -75,11 +75,11 @@ class AudioProcessor {
     handleContentScriptMessage(message, port) {
         switch (message.type) {
             case "AUDIO_CHUNK":
-                this.handleAudioChunk(message.blob, message.timestamp, message.duration, message.videoTitle, message.videoUrl, port);
+                this.handleAudioChunk(message.blob, message.timestamp, message.duration, message.videoUrl, message.videoTitle, message.playbackTimestamp ,port);
                 break;
         }
     }
-    async handleAudioChunk(blob, timestamp, duration, videoTitle, videoUrl, port) {
+    async handleAudioChunk(blob, timestamp, duration, videoUrl, videoTitle, playbackTimestamp, port) {
         try {
             console.log('Service worker received audio chunk!');
             // Send audio data to API endpoint for processing
@@ -89,8 +89,12 @@ class AudioProcessor {
                 framecount: 0, // TODO
                 duration: duration,
                 startTime: timestamp,
-                endTime: timestamp + duration
+                endTime: timestamp + duration,
+                playbackTimestamp: playbackTimestamp,
+                videoTitle: videoTitle
             };
+            console.log("test")
+            console.log(metadata);
             let chunkVideoTitle = null;
             let chunkVideoUrl = null;
             if (videoTitle) {
@@ -100,10 +104,12 @@ class AudioProcessor {
                 chunkVideoUrl = videoUrl;
             }
             this.setLatestData(data, metadata, chunkVideoTitle, chunkVideoUrl);
-            console.log('test');
             this.sendProcessedAudio(port, data, this.latestAudioMetadata); // send audio back to content script on received port
             console.log('Broadcasting to popups...');
             this.broadcastToPopups(this.latestAudioData, this.latestAudioMetadata);
+            // // console.log(this.latestAudioData)
+            // console.log("this is metadata")
+            // console.log(this.latestAudioMetadata);
             console.log('Service worker broadcast to popup');
         }
         catch (e) {
@@ -122,6 +128,7 @@ class AudioProcessor {
         }
         let audioRecord = {
             timestamp: currTime,
+            playbackTimestamp: metadata.playbackTimestamp,
             confidence: data.confidence,
             decision: data.decision,
         };

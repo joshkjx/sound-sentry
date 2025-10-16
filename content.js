@@ -232,8 +232,18 @@ class AudioCapture {
             return;
         }
         this.chunkCount++;
+        let videoPlaybackSeconds = 0;
+        if (this.currentVideo) {
+            if (this.currentVideo.readyState < 1) {
+                console.warn('Video metadata not loaded yet');
+                return;
+            }
+            this.videoPlaybackSeconds = this.currentVideo.currentTime;
+
+        }
         const now = Date.now();
         const duration = now - this.recordingStartTime;
+        const playbackTimestamp = this.videoPlaybackSeconds;
         const metadata = this.getVideoMetadata();
         console.log(`Audio chunk ${this.chunkCount}: ${blob.size} bytes, ${blob.type}`);
         if (this.port) { //sends chunk to service worker
@@ -244,7 +254,8 @@ class AudioCapture {
                 timestamp: now,
                 duration: duration,
                 videoUrl: metadata.url,
-                videoTitle: metadata.title
+                videoTitle: metadata.title,
+                playbackTimestamp: playbackTimestamp
             });
         }
     }
@@ -255,6 +266,7 @@ class AudioCapture {
             title: document.title.replace(' - YouTube', '') // Clean up YouTube suffix
         };
     }
+
     // ============================================
     // HANDLING OF PROCESSED DATA (PLACEHOLDER)
     // ============================================
