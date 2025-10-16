@@ -99,9 +99,11 @@ class AudioProcessor {
                 chunkVideoUrl = videoUrl;
             }
             this.setLatestData(data, metadata, chunkVideoTitle, chunkVideoUrl);
+            console.log('test');
             this.sendProcessedAudio(port, data, this.latestAudioMetadata); // send audio back to content script on received port
             console.log('Broadcasting to popups...');
             this.broadcastToPopups(this.latestAudioData, this.latestAudioMetadata);
+            console.log('Service worker broadcast to popup');
         }
         catch (e) {
             const errorMsg = e instanceof Error ? e.message : String(e);
