@@ -57,14 +57,16 @@ class PopupController {
         }
     }
     handleDataUpdate(data, metadata) {
+        if (metadata && metadata.videoTitle) {
+            this.updateVideoTitle(metadata.videoTitle); 
+        }
         // Update DOM elements with new data
-        this.updateTitle(metadata.videoTitle)
         this.updateChunkCount(data.chunksReceivedCount);
         this.updateDecision(data.decision);
         this.updateConfidence(data.confidence);
         this.updateConfidenceChart(data, metadata);
     }
-    updateTitle(title) {
+    updateVideoTitle(title) {
         const element = document.getElementById('video-title');
         if (element)
             element.textContent = title.toString();

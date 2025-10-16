@@ -3,33 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <title>AI Voice Detector</title>
+    <link rel="stylesheet" href="popup.css">
+    <script src="chart.umd.js"></script> 
 </head>
 <body>
-<div class="container">
-    <h1>Audio Analysis</h1>
-    <div class="stats">
-         <div class="stat-item">
-            <span id="video-title">--</span>
-        </div>
-        <div class="stat-item">
-            <label>Chunks Processed:</label>
-            <span id="chunk-count">--</span>
-        </div>
-        <div class="stat-item">
-            <label>Latest Decision:</label>
-            <span id="decision">--</span>
-        </div>
-        <div class="stat-item">
-            <label>With Confidence:</label>
-            <span id="confidence">--</span>
-        </div>
-    </div>
-    <div>
-        <canvas id="confidence-chart"></canvas>
-    </div>
-</div>
+    <div class="container">
+        <header class="header-box">
+            <h1>AI Voice Detector</h1>
+        </header>
 
-<script src="chart.umd.js"></script>
-<script src="popup.js" type="module"></script>
+        <h2 id="video-title" class="video-title-display">Video Title</h2>
+
+        <div class="stats-grid">
+            
+            <div class="stat-row">
+                <span class="label">Decision:</span>
+                <div id="decision-box" class="decision-pill">
+                    <span id="decision">N/A</span>
+                </div>
+            </div>
+
+            <div class="stat-row">
+                <span class="label">Confidence:</span>
+                <span id="confidence" class="confidence-value">0.00</span>
+            </div>
+            
+            <div style="display: none;">Chunks Processed: <span id="chunk-count">0</span></div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="confidence-chart" height="180"></canvas>
+        </div>
+    </div>
+
+    <script src="popup.js" type="module"></script>
 </body>
 </html>
