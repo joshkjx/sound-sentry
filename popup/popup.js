@@ -65,6 +65,7 @@ class PopupController {
         this.updateDecision(data.decision);
         this.updateConfidence(data.confidence);
         this.updateConfidenceChart(data, metadata);
+        this.checkWarningStatus();
     }
     updateVideoTitle(title) {
         const element = document.getElementById('video-title');
@@ -136,6 +137,37 @@ class PopupController {
 
         // Update the existing chart instance
         this.chartInstance.update();
+    }
+
+    checkWarningStatus() {
+        const WARN_THRESHOLD = 0.65;
+        const LAST_N_POINTS = 5;
+
+        const confidenceData = this.chartData.datasets[0].data;
+        const warningBox = document.getElementById('warning-box');
+
+        if (!warningBox || confidenceData.length < LAST_N_POINTS) {
+            // Not enough data points to check, ensure warning is hidden
+            if (warningBox) warningBox.classList.add('hidden');
+            return;
+        }
+
+        // Get last N confidence points
+        const lastN = confidenceData.slice(-LAST_N_POINTS);
+
+        // Calculate the average confidence
+        const sum = lastN.reduce((a, b) => a + b, 0);
+        const averageConfidence = sum / LAST_N_POINTS;
+
+        console.log(`Last ${LAST_N_POINTS} average confidence: ${averageConfidence.toFixed(4)}`);
+
+        if (averageConfidence >= WARN_THRESHOLD) {
+            // Show the warning box
+            warningBox.classList.remove('hidden');
+        } else {
+            // Hide the warning box
+            warningBox.classList.add('hidden');
+        }
     }
 
 }

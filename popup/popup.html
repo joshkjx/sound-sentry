@@ -30,9 +30,12 @@
             
             <div style="display: none;">Chunks Processed: <span id="chunk-count">0</span></div>
         </div>
-
         <div class="chart-container">
             <canvas id="confidence-chart" height="180"></canvas>
+        </div>
+        <div id="warning-box" class="warning-box hidden">
+            <span class="warning-icon">🛡️</span>
+            <p class="warning-text">Warning: High confidence of AI voice detected in the last few chunks.</p>
         </div>
     </div>
 

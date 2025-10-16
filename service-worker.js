@@ -93,8 +93,6 @@ class AudioProcessor {
                 playbackTimestamp: playbackTimestamp,
                 videoTitle: videoTitle
             };
-            console.log("test")
-            console.log(metadata);
             let chunkVideoTitle = null;
             let chunkVideoUrl = null;
             if (videoTitle) {
