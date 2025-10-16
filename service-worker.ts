@@ -52,6 +52,8 @@ interface AudioMetadata {
     duration: number;
     startTime: number;
     endTime: number;
+    playbackTimestamp: number;
+    videoTitle: string
 }
 
 // ============================================
@@ -168,15 +170,10 @@ class AudioProcessor {
             const data = await this.sendToASRService(blob);
 
             // Build metadata for visualisation handling (maybe)
-            const metadata = {
-                framecount: 0, // TODO
-                duration: duration,
-                startTime: timestamp,
-                endTime: timestamp + duration
-            };
 
             let chunkVideoTitle: string | null = null;
             let chunkVideoUrl: string | null = null;
+            let chunkPlaybackTimestamp: number | null = null;
 
             if (videoTitle){
                 chunkVideoTitle = videoTitle;
@@ -184,6 +181,15 @@ class AudioProcessor {
             if (videoUrl){
                 chunkVideoUrl = videoUrl;
             }
+
+            const metadata = {
+                framecount: 0, // TODO
+                duration: duration,
+                startTime: timestamp,
+                endTime: timestamp + duration,
+                playbackTimestamp: chunkPlaybackTimestamp,
+                videoTitle: chunkVideoTitle
+            };
 
             this.setLatestData(data,metadata,chunkVideoTitle,chunkVideoUrl);
 

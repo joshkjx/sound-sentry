@@ -45,6 +45,8 @@ interface AudioMetadata {
     duration: number;
     startTime: number;
     endTime: number;
+    playbackTimestamp: number;
+    videoTitle: string
 }
 
 // ============================================
