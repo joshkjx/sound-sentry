@@ -32,18 +32,6 @@ body {
     color: #333;
 }
 
-/* Video Title */
-/* .video-title-display {
-    font-size: 16px;
-    font-weight: normal;
-    text-align: center;
-    color: #555;
-    margin: 0;
-    padding: 5px 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-} */
  /* Video Title Info */
 .video-info-box {
     display: flex;
