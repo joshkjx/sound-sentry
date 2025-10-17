@@ -60,8 +60,9 @@ body {
 
 .label {
     font-weight: bold;
-    font-size: 0.95em;
+    font-size: 14px;
     color: #333;
+    padding-left: 10px;
     width: 100px; /* Fixed width for labels to align content */
     flex-shrink: 0;
 }
@@ -78,13 +79,13 @@ body {
 }
 
 .decision-pill span {
-    font-size: 0.9em;
+    font-size: 13px;
     color: #333;
 }
 
 /* Confidence Value */
 .confidence-value {
-    font-size: 1em;
+    font-size: 13px;
     color: #007bff;
     font-weight: 600;
 }

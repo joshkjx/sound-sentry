@@ -60,6 +60,31 @@ class PopupController {
         if (metadata && metadata.videoTitle) {
             this.updateVideoTitle(metadata.videoTitle); 
         }
+
+        //Decision Box Styling Logic
+        const decisionPill = document.getElementById('decision-box');
+        const decisionText = document.getElementById('decision');
+        
+        if (decisionPill && decisionText) {
+            let bgColor = '#fff';
+            let borderColor = '#333';
+            let textColor = '#333';
+
+            if (data.decision === 'AI') {
+                bgColor = '#f8d7da';     
+                borderColor = '#dc3545';
+                textColor = '#dc3545';  
+            } else if (data.decision === 'Not AI') {
+                bgColor = '#d4edda';     
+                borderColor = '#28a745';
+                textColor = '#28a745';  
+            }
+
+            decisionPill.style.backgroundColor = bgColor;
+            decisionPill.style.borderColor = borderColor;
+            decisionText.style.color = textColor;
+        }
+
         // Update DOM elements with new data
         this.updateChunkCount(data.chunksReceivedCount);
         this.updateDecision(data.decision);
@@ -122,11 +147,9 @@ class PopupController {
         const minutes = Math.floor(playbackSeconds / 60);
         const seconds = Math.floor(playbackSeconds % 60);
         const formattedPlayback = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        
+        // add the new label and confidence point.
         this.chartData.labels.push(formattedPlayback);
-
-        // Add the new point
-        // this.chartData.labels.push(chunk);
-        // this.chartData.labels.push(playbackTimestamp);
         this.chartData.datasets[0].data.push(confidence);
 
         // Optional: limit chart length to 10 points
