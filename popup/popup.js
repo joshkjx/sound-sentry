@@ -109,8 +109,11 @@ class PopupController {
     }
     updateConfidence(confidence) {
         const element = document.getElementById('confidence');
-        if (element)
-            element.textContent = confidence.toString();
+        const formattedConfidence = (confidence * 100).toFixed(2) + '%';
+        
+        if (element) {
+            element.textContent = formattedConfidence;
+        }
     }
 
     initChart() {
