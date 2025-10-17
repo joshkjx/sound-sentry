@@ -33,7 +33,7 @@ body {
 }
 
 /* Video Title */
-.video-title-display {
+/* .video-title-display {
     font-size: 16px;
     font-weight: normal;
     text-align: center;
@@ -43,6 +43,44 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+} */
+ /* Video Title Info */
+.video-info-box {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 10px 5px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #f5f5f5; /* Light background for the container */
+    margin-bottom: 5px; /* Add some space below this box */
+}
+
+.listening-label {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #6c757d; 
+    margin-bottom: 3px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.video-title-display {
+    font-size: 1.1em;
+    font-weight: bold; 
+    text-align: center;
+    color: #333;
+    margin: 0; 
+    padding: 5px 0px 5px 0px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 5px 0;
 }
 
 /* Stats Section */
@@ -63,7 +101,7 @@ body {
     font-size: 14px;
     color: #333;
     padding-left: 10px;
-    width: 100px; /* Fixed width for labels to align content */
+    width: 100px;
     flex-shrink: 0;
 }
 
@@ -121,7 +159,7 @@ canvas {
 .warning-text {
     margin: 0;
     font-size: 0.9em;
-    font-weight: 500;
+    font-weight: bold;
 }
 
 .hidden {
