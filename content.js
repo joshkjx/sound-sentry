@@ -96,24 +96,59 @@ class AudioCapture {
         console.log('Initialising YouTube audio capture');
         // private method that checks if a video is on the page
         // Needs to be defined per supported website since the video css class used may differ.
-        const checkVideo = () => {
-            const video = document.querySelector('video.html5-main-video');
-            if (video) {
-                this.attachVideoListeners(video); // if there is a video on the page, start to listen to it to get data
-            }
-        };
+        // const checkVideo = () => {
+        //     const video = document.querySelector('video.html5-main-video');
+        //     if (video) {
+        //         this.attachVideoListeners(video); // if there is a video on the page, start to listen to it to get data
+        //     }
+        // };
+
+        const handleNavigation = () => {
+            console.log('YouTube navigation detected. Resetting video state.');
+            this.resetCaptureState();
+            this.checkVideoWithRetry();
+        }
         //Check for navigation on YouTube, an SPA
-        document.addEventListener('yt-navigate-finish', checkVideo);
+        document.addEventListener('yt-navigate-finish', handleNavigation);
         const observer = new MutationObserver(() => {
             if (!this.currentVideo) {
-                checkVideo();
+                // checkVideo();
+                this.checkVideoWithRetry();
             }
         });
         observer.observe(document.body, {
             childList: true,
             subtree: true
         });
-        checkVideo();
+        // checkVideo();
+    }
+    resetCaptureState() {
+
+        this.stopCapture(true);
+
+        this.currentVideo = null;
+        this.mediaStream = null;
+        this.mediaRecorder = null;
+        this.isCapturing = false;
+        this.chunkCount = 0;
+        this.recordingStartTime = 0;
+
+        // Reset tracked video listeners
+        this.attachedVideos = new WeakSet();
+
+        console.log('AudioCapture state fully reset');
+    }
+
+    checkVideoWithRetry(retries = 3) {
+        const video = document.querySelector('video.html5-main-video');
+            if (video) {
+                this.attachVideoListeners(video);
+                console.log('New video element found and listeners reattached');
+            } else if (retries > 0) {
+                setTimeout(() => this.checkVideoWithRetry(retries - 1), 500); //half a second delay before reattempt to find video again
+            } else {
+                console.warn('Failed to find video element after navigation');
+            }
     }
     // ============================================
     // VIDEO ELEMENT HANDLING
