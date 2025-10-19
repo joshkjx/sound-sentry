@@ -125,6 +125,7 @@ class AudioCapture {
     resetCaptureState() {
 
         this.stopCapture(true);
+        //TODO: Save current capture state for error handling
 
         this.currentVideo = null;
         this.mediaStream = null;
