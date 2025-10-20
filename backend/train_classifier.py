@@ -67,6 +67,7 @@ if __name__ == "__main__":
 
     scaler_path = os.path.join(DATA_DIR, SCALER_OUTPUT_FILE)
     joblib.dump(feature_scaler, scaler_path)
+    print(f"Scaler saved to {scaler_path}.")
 
     # To tensors
     features_train_tensor = torch.tensor(features_train, dtype=torch.float32)
@@ -133,4 +134,4 @@ if __name__ == "__main__":
 
     model_path = os.path.join(DATA_DIR, MODEL_OUTPUT_FILE)
     torch.save(model.state_dict(), model_path)
-    print("Classifier trained and saved.")
+    print(f"Classifier trained and saved to {model_path}.")

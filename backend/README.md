@@ -5,7 +5,7 @@ Tested with [In-the-Wild](https://www.kaggle.com/datasets/abdallamohamed312/in-t
 Implemented pyannote [
 speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) for the speaker recognition (SR) model.
 
-Updated DeepSonar to use pytorch over tensorflow, as the core of DEepSonar is a classifier.
+Updated DeepSonar to use pytorch over tensorflow, as the core of DeepSonar is a classifier.
 
 ```text
 CS5647Project/
@@ -25,7 +25,7 @@ CS5647Project/
     └── utils.py
 ```
 
-### create conda environment
+### Create conda environment
 
 To create conda environment:
 

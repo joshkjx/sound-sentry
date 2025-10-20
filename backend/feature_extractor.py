@@ -35,7 +35,7 @@ for idx, row in tqdm(metadata_df.iterrows(), total=metadata_df.shape[0]):
     file_name = row['file']
     label_str = row['label']
 
-    audio_path = os.path.join(DATA_DIR, file_name)
+    audio_path = os.path.join(DATA_DIR, DATASET, file_name)
     # skip if the .wav file is not in the folder
     if not os.path.exists(audio_path):
         print(f"Skipping missing file: {audio_path}")
@@ -67,4 +67,4 @@ np.save(labels_path, all_labels_array)
 for hook in hooks:
     hook.remove()
 
-print("Feature and label extraction complete. Saved to features.npy and labels.npy.")
+print(f"Feature and label extraction complete. Saved to {features_path} and {labels_path}.")

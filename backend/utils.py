@@ -62,7 +62,7 @@ def apply_tkan(activations_dict: dict, layer_names: list, k: int = 5) -> np.ndar
 # Loads audio, averages to mono and resamples to 16kHz.
 # Ensures mono for consistency, as pyannote expects it.
 def load_audio(file_path: str) -> torch.Tensor:
-    waveform, sample_rate = torchaudio.load(file_path)
+    waveform, sample_rate = torchaudio.load_with_torchcodec(file_path)
     waveform = waveform.mean(0, keepdim=True)  # To mono
     if sample_rate != 16000:
         waveform = torchaudio.functional.resample(waveform, sample_rate, 16000)
