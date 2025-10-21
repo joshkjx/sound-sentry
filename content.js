@@ -9,6 +9,7 @@ class AudioCapture {
         this.mediaRecorder = null;
         this.mediaStream = null;
         this.currentVideo = null;
+        this.videoCurrentTime = 0; // Holds current timestamp for the playing video for tracking purposes when playback is interrupted
         this.isCapturing = false;
         this.isTabActive = !document.hidden;
         this.port = null;
@@ -17,6 +18,7 @@ class AudioCapture {
         // Track recording metadata
         this.recordingStartTime = 0;
         this.chunkCount = 0;
+        this.getVideoMetadata = null; // Using an aliasing function that we can reassign during site-specific init.
         this.init();
     }
     init() {
@@ -94,15 +96,8 @@ class AudioCapture {
     }
     initYouTube() {
         console.log('Initialising YouTube audio capture');
-        // private method that checks if a video is on the page
-        // Needs to be defined per supported website since the video css class used may differ.
-        // const checkVideo = () => {
-        //     const video = document.querySelector('video.html5-main-video');
-        //     if (video) {
-        //         this.attachVideoListeners(video); // if there is a video on the page, start to listen to it to get data
-        //     }
-        // };
 
+        // private method that resets capture state if YouTube SPA navigation is detected.
         const handleNavigation = () => {
             console.log('YouTube navigation detected. Resetting video state.');
             this.resetCaptureState();
@@ -112,7 +107,6 @@ class AudioCapture {
         document.addEventListener('yt-navigate-finish', handleNavigation);
         const observer = new MutationObserver(() => {
             if (!this.currentVideo) {
-                // checkVideo();
                 this.checkVideoWithRetry();
             }
         });
@@ -120,13 +114,27 @@ class AudioCapture {
             childList: true,
             subtree: true
         });
-        // checkVideo();
+
+        this.getVideoMetadata = this.getYoutubeVideoMetadata.bind(this); // Set the metadata fetcher to the youtube implementation
     }
+
+    getYoutubeVideoMetadata() {
+        return {
+            url: window.location.href,
+            video_id: window.location.href.replace('https://www.youtube.com/watch?v=','YT-'), // extract youtube video id from url. Can use this as a unique identifier for videos.
+            title: document.title.replace(' - YouTube', '') // Clean up YouTube suffix
+        };
+    }
+
+    // ============================================
+    // CAPTURE RESET AND RETRY LOGIC
+    // ============================================
     resetCaptureState() {
 
         this.stopCapture(true);
         //TODO: Save current capture state for error handling
 
+        this.videoCurrentTime = 0;
         this.currentVideo = null;
         this.mediaStream = null;
         this.mediaRecorder = null;
@@ -161,18 +169,38 @@ class AudioCapture {
         this.attachedVideos.add(videoElement);
         videoElement.addEventListener('play', () => {
             if (this.isTabActive) {
-                console.log("Play Event Received");
+                console.log("Play Event Received.");
                 this.startCapture(videoElement);
             }
         });
         videoElement.addEventListener('pause', () => {
             if (this.currentVideo === videoElement) {
-                this.stopCapture();
+                console.log("Pause Event Received")
+                this.stopCapture(false);
             }
         });
         videoElement.addEventListener('ended', () => {
             if (this.currentVideo === videoElement) {
                 this.stopCapture();
+            }
+        });
+
+        videoElement.addEventListener('seeked', () => { // fired when user finishes seeking
+            if (this.currentVideo === videoElement) {
+                console.log("videoNewTime is " + this.currentVideo.currentTime);
+                console.log("stored time is: "+ this.videoCurrentTime);
+                let videoNewTime = this.currentVideo.currentTime;
+                if (videoNewTime < this.videoCurrentTime) {
+                    console.log("Seek Backward Detected")
+                    this.startCapture(videoElement);
+                }
+                else if (videoNewTime >= this.videoCurrentTime) {
+                    console.log("Seek Forward Detected")
+                    this.startCapture(videoElement);
+                }
+                else{
+                    console.warn("Error occurred while handling seeking.");
+                }
             }
         });
         // start capture if video is already playing in active tab
@@ -203,6 +231,7 @@ class AudioCapture {
             console.error('No audio tracks available in the captured stream');
             console.log('Video muted:', videoElement.muted);
             console.log('Video has audio:', !!videoElement.audioTracks?.length);
+            this.isCapturing = false;
             return;
         }
         console.log(`Captured ${audioTracks.length} audio track(s)`);
@@ -217,6 +246,7 @@ class AudioCapture {
         this.recordingStartTime = Date.now();
         this.chunkCount = 0;
         this.mediaRecorder.ondataavailable = (event) => {
+            this.videoCurrentTime = this.currentVideo.currentTime; // Track last seen timestamp
             // The event is typed BlobEvent and contains the recorded media in data property
             this.handleAudioChunk(event.data);
         };
@@ -258,6 +288,12 @@ class AudioCapture {
         }
         console.log('Audio Capture Stopped');
     }
+
+    resumeCapture(videoElement, resumeTime){
+        if (videoElement === this.currentVideo) {
+                this.startCapture(videoElement);
+            }
+    }
     // ============================================
     // AUDIO CHUNK HANDLING
     // ============================================
@@ -280,7 +316,9 @@ class AudioCapture {
         const now = Date.now();
         const duration = now - this.recordingStartTime;
         const playbackTimestamp = this.videoPlaybackSeconds;
-        const metadata = this.getVideoMetadata();
+        if (this.getVideoMetadata) {
+            const metadata = this.getVideoMetadata();
+        }
         console.log(`Audio chunk ${this.chunkCount}: ${blob.size} bytes, ${blob.type}`);
         if (this.port) { //sends chunk to service worker
             console.log('Attempting to post to Service Worker...');
@@ -296,12 +334,6 @@ class AudioCapture {
         }
     }
     // Helper function to get video title and url for more user-friendly experience
-    getVideoMetadata() {
-        return {
-            url: window.location.href,
-            title: document.title.replace(' - YouTube', '') // Clean up YouTube suffix
-        };
-    }
 
     // ============================================
     // HANDLING OF PROCESSED DATA (PLACEHOLDER)
