@@ -19,6 +19,8 @@ class AudioCapture {
         this.recordingStartTime = 0;
         this.chunkCount = 0;
         this.getVideoMetadata = null; // Using an aliasing function that we can reassign during site-specific init.
+
+        this.vidCaptureTimeout = null; // container for a timeout set by handleAudioChunk
         this.init();
     }
     init() {
@@ -166,8 +168,12 @@ class AudioCapture {
     // ============================================
     attachVideoListeners(videoElement) {
         // Prevent attaching redundant listeners
-        if (this.attachedVideos.has(videoElement))
+        if (this.attachedVideos.has(videoElement)) {
+            if (!videoElement.paused && this.isTabActive) {
+                this.startCapture(videoElement);
+            }
             return;
+        }
         this.attachedVideos.add(videoElement);
         videoElement.addEventListener('play', () => {
             if (this.isTabActive) {
@@ -205,7 +211,6 @@ class AudioCapture {
                 }
             }
         });
-        // start capture if video is already playing in active tab
         if (!videoElement.paused && this.isTabActive) {
             this.startCapture(videoElement);
         }
@@ -301,6 +306,10 @@ class AudioCapture {
     // ============================================
     // Function to process each blob of 3s recorded data
     handleAudioChunk(blob) {
+        if (this.vidCaptureTimeout){ // If timeout is active, clear the timeout
+            clearTimeout(this.vidCaptureTimeout);
+            this.vidCaptureTimeout = null;
+        }
         if (blob.size === 0) {
             console.warn('Received empty audio chunk');
             return;
@@ -310,6 +319,7 @@ class AudioCapture {
         if (this.currentVideo) {
             if (this.currentVideo.readyState < 1) {
                 console.warn('Video metadata not loaded yet');
+                this.setVidCaptureTimeout();
                 return;
             }
             this.videoPlaybackSeconds = this.currentVideo.currentTime;
@@ -332,9 +342,17 @@ class AudioCapture {
                 videoTitle: metadata.title,
                 playbackTimestamp: playbackTimestamp
             });
+            this.setVidCaptureTimeout(7000);
         }
     }
     // Helper function to get video title and url for more user-friendly experience
+    setVidCaptureTimeout(time = 3000) {
+        this.vidCaptureTimeout = setTimeout(() => {
+            console.log("No audio chunk processed in the last 7 seconds, checking for video elements...");
+            this.checkVideoWithRetry();
+            this.vidCaptureTimeout = null;
+        }, time);
+    }
 
     // ============================================
     // HANDLING OF PROCESSED DATA (PLACEHOLDER)
