@@ -115,7 +115,9 @@ class AudioCapture {
             subtree: true
         });
 
-        this.getVideoMetadata = this.getYoutubeVideoMetadata.bind(this); // Set the metadata fetcher to the youtube implementation
+        this.getVideoMetadata = () => {
+            return this.getYoutubeVideoMetadata();
+        } // Set the metadata fetcher to the youtube implementation
     }
 
     getYoutubeVideoMetadata() {
@@ -316,9 +318,8 @@ class AudioCapture {
         const now = Date.now();
         const duration = now - this.recordingStartTime;
         const playbackTimestamp = this.videoPlaybackSeconds;
-        if (this.getVideoMetadata) {
-            const metadata = this.getVideoMetadata();
-        }
+        const metadata = this.getVideoMetadata();
+
         console.log(`Audio chunk ${this.chunkCount}: ${blob.size} bytes, ${blob.type}`);
         if (this.port) { //sends chunk to service worker
             console.log('Attempting to post to Service Worker...');
