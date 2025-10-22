@@ -4,6 +4,7 @@ import numpy as np
 
 # Constants for paths and params
 DATA_DIR = "data"
+DATASET = "release-in-the-wild"
 FEATURES_OUTPUT_FILE = "features.npy"
 LABELS_OUTPUT_FILE = "labels.npy"
 SCALER_OUTPUT_FILE = "feature_scaler.pkl"

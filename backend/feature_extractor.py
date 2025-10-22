@@ -6,11 +6,9 @@ from pyannote.audio import Model
 import pandas as pd
 from utils import (
     register_hooks, load_audio, apply_tkan, DATA_DIR,
-    FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE, LAYER_NAMES,
-    DEVICE, TOP_K
+    DATASET, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE,
+    LAYER_NAMES, DEVICE, TOP_K
 )
-
-DATASET = "release-in-the-wild"
 
 # Load pyannote model
 # Differences from original DeepSonar:

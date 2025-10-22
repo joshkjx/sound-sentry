@@ -5,9 +5,10 @@ from train_classifier import BinaryClassifier
 import joblib
 import os
 from pydub import AudioSegment
+import pandas as pd
 from utils import ( 
     register_hooks, load_audio, apply_tkan, 
-    DATA_DIR, SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE,
+    DATA_DIR, DATASET, SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE,
     LAYER_NAMES, DEVICE, TOP_K
 )
 
@@ -71,7 +72,7 @@ def predict_single_segment(waveform: torch.Tensor) -> float:
 # - Flags as fake if any segment greater than threshold.
 # Differences from original DeepSonar:
 # - Added diarization integration.
-def predict(audio_path: str, threshold: float = 0.5) -> dict:
+def predict(audio_path: str, threshold: float = 0.4349) -> dict:
     results = {"overall": "Real", "details": []}
     if not USE_DIARIZATION:
         # Single file prediction
@@ -113,9 +114,28 @@ def predict(audio_path: str, threshold: float = 0.5) -> dict:
         
         if result == "Fake":
             results["overall"] = "Fake"
+
+    # Load meta.csv and print label for this audio_path
+    metadata_path = os.path.join(DATA_DIR, DATASET, "meta.csv")
+    metadata_df = pd.read_csv(metadata_path)
+    file_name = os.path.basename(audio_path)
+    matching_row = metadata_df[metadata_df['file'] == file_name]
+    if not matching_row.empty:
+        label_str = matching_row['label'].values[0]
+        print(f"Ground truth label for {file_name}: {label_str}")
+    else:
+        print(f"No ground truth label found for {file_name} in meta.csv")
     
     return results
+
+# Example use
+if __name__ == "__main__":
+    audio_file = "data/release-in-the-wild/33.wav"
+    prediction_results = predict(audio_file)
+    print(prediction_results)
 
 # Cleanup hooks
 for hook in HOOKS:
     hook.remove()
+
+
