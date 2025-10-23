@@ -2,7 +2,7 @@ import torch
 import os
 import numpy as np
 from tqdm import tqdm
-from pyannote.audio import Model
+from pyannote.audio import Model, Pipeline
 import pandas as pd
 from utils import (
     register_hooks, load_audio, apply_tkan, DATA_DIR,

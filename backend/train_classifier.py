@@ -9,6 +9,7 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 import os
 from sklearn.metrics import roc_curve
+from imblearn.over_sampling import SMOTE
 from utils import (
     DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE, 
     SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE
@@ -47,7 +48,7 @@ if __name__ == "__main__":
     features = np.load(features_path)
     labels = np.load(labels_path)
 
-    print("Label distribution:")
+    print("\nLabel distribution:")
     print(pd.Series(labels).value_counts())
 
     # Split data: 60/20/20 with stratification
@@ -57,21 +58,100 @@ if __name__ == "__main__":
         features_temp, labels_temp, test_size=0.5, stratify=labels_temp,
         random_state=4347)
     
+    # print(f"\nTrain set: {features_train.shape[0]} samples")
+    # print(f"Val set: {features_val.shape[0]} samples")
+    # print(f"Test set: {features_test.shape[0]} samples")
+    
+    # print(f"Train features before scaling:")
+    # print(f"  Mean: {features_train.mean():.2f}")
+    # print(f"  Std: {features_train.std():.2f}")
+    # print(f"  Min: {features_train.min():.2f}")
+    # print(f"  Max: {features_train.max():.2f}")
+
+    # Check per-feature variance
+    per_feature_std = features_train.std(axis=0)
+    # print(f"\nPer-feature std statistics:")
+    # print(f"  Min: {per_feature_std.min():.6f}")
+    # print(f"  Max: {per_feature_std.max():.2f}")
+    # print(f"  Mean: {per_feature_std.mean():.2f}")
+
+    # Identify low-variance features
+    low_var_threshold = 0.01  # Features with std < 0.01 are nearly constant
+    low_var_mask = per_feature_std < low_var_threshold
+    num_low_var = low_var_mask.sum()
+
+    if num_low_var > 0:
+        print(f"\nWARNING: {num_low_var} features have very low variance (std < {low_var_threshold})")
+        print(f"   These features are nearly constant and will be handled specially.")
+        print(f"   Low-variance feature indices: {np.where(low_var_mask)[0][:10]}...")
+    
+    # Fit scaler with explicit parameters
     # Scale features (fits on train only)
     # Differences from original DeepSonar:
     # - Added scaling for better NN performance.
-    feature_scaler = StandardScaler().fit(features_train)
-    features_train = feature_scaler.transform(features_train)
+    feature_scaler = StandardScaler(copy=True, with_mean=True, with_std=True)
+    feature_scaler.fit(features_train)
+
+    # Fix low-variance features by updating their scale to 1.0 to avoid division by tiny numbers
+    if num_low_var > 0:
+        print(f"\n   Fixing {num_low_var} low-variance features...")
+        if feature_scaler.scale_ is not None:
+            original_scale = feature_scaler.scale_.copy()
+            feature_scaler.scale_[low_var_mask] = 1.0
+            print(f"   Before fix - min scale: {original_scale.min():.6f}")
+            print(f"   After fix - min scale: {feature_scaler.scale_.min():.6f}")
+        else:
+            print("   Error: Scaler not fitted properly")
+
+    # Verify scaler parameters
+    # print(f"\nScaler parameters:")
+    # if feature_scaler.mean_ is not None:
+    #     print(f"  Mean (avg): {feature_scaler.mean_.mean():.2f}")
+    # else:
+    #     print("  Mean: None (scaler not fitted)")
+    # if feature_scaler.scale_ is not None:
+    #     print(f"  Scale (avg): {feature_scaler.scale_.mean():.2f}")
+    #     print(f"  Scale (min): {feature_scaler.scale_.min():.2f}")
+    #     print(f"  Scale (max): {feature_scaler.scale_.max():.2f}")
+    # else:
+    #     print("  Scale: None (scaler not fitted)")
+
+    # Apply scaling
+    features_train_scaled = feature_scaler.transform(features_train)
     features_val = feature_scaler.transform(features_val)
     features_test = feature_scaler.transform(features_test)
 
+    # Verify scaling worked
+    # print(f"\nTrain features after scaling:")
+    # print(f"  Mean: {features_train_scaled.mean():.6f} (should be ~0)")
+    # print(f"  Std: {features_train_scaled.std():.6f} (should be ~1)")
+    # print(f"  Min: {features_train_scaled.min():.2f}")
+    # print(f"  Max: {features_train_scaled.max():.2f}")
+
+    if abs(features_train_scaled.mean()) > 0.01 or abs(features_train_scaled.std() - 1.0) > 0.1:
+        print("\nERROR: Scaling verification failed!")
+        print("   Features are not properly standardized.")
+        exit(1)
+
+    # Save scaler
     scaler_path = os.path.join(DATA_DIR, SCALER_OUTPUT_FILE)
     joblib.dump(feature_scaler, scaler_path)
-    print(f"Scaler saved to {scaler_path}.")
+    print(f"\nScaler saved to {scaler_path}")
 
-    # To tensors
-    features_train_tensor = torch.tensor(features_train, dtype=torch.float32)
-    labels_train_tensor = torch.tensor(labels_train, dtype=torch.float32)
+    # Classification with imbalanced classes by performing over-sampling.
+    # Differences from original DeepSonar:
+    # - Apply SMOTE to train data for imbalance 
+    smote = SMOTE(random_state=4347)
+    resample_result = smote.fit_resample(features_train_scaled, labels_train)
+    features_train_res, labels_train_res = resample_result[0], resample_result[1]
+
+    print(f"After SMOTE: {features_train_res.shape[0]} samples")
+    print(f"Label distribution after SMOTE:")
+    print(pd.Series(np.array(labels_train_res)).value_counts())
+
+    # Convert to tensors
+    features_train_tensor = torch.tensor(features_train_res, dtype=torch.float32)
+    labels_train_tensor = torch.tensor(labels_train_res, dtype=torch.float32)
     features_val_tensor = torch.tensor(features_val, dtype=torch.float32)
     labels_val_tensor = torch.tensor(labels_val, dtype=torch.float32)
     features_test_tensor = torch.tensor(features_test, dtype=torch.float32)
@@ -82,9 +162,16 @@ if __name__ == "__main__":
     # - Adam instead of SGD, added weight_decay.
     model = BinaryClassifier(input_dim=features.shape[1]).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()  # Handles logits directly
-    optimizer = optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-5)
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=0.0001,
+        betas=(0.9, 0.999),  # beta1 matches the SGD momentum
+        weight_decay=1e-6    # Approximates the decay as L2 regularization
+    )
     
-    
+    best_val_loss = float('inf')
+    patience = 1000  # Stop if no improvement for 1000 epochs
+    counter = 0
     for epoch in range(10000):
         model.train()
         optimizer.zero_grad()
@@ -111,6 +198,16 @@ if __name__ == "__main__":
                   f"val_loss={val_loss:.4f}, val_acc={val_acc:.3f}, "
                   f"val_auc={val_auc:.3f}, val_f1={val_f1:.3f}")
 
+        # Early stopping check
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            counter = 0
+        else:
+            counter += 1
+            if counter >= patience:
+                print(f"Early stopping at epoch {epoch+1}")
+                break
+
     # Test evaluation
     model.eval()
     with torch.no_grad():
@@ -125,13 +222,23 @@ if __name__ == "__main__":
           f"F1: {test_f1:.4f}")
 
     # EER calculation
-    # Differences: Added EER metric (not in paper; my version had basic acc/auc only).
+    # Differences: Added EER metric.
     fpr, tpr, thresholds = roc_curve(labels_test, test_prob)
     fnr = 1 - tpr
     eer_threshold_idx = np.nanargmin(np.absolute(fnr - fpr))
     eer = fpr[eer_threshold_idx]
-    print(f"EER: {eer:.4f} at threshold={thresholds[eer_threshold_idx]:.4f}")
+    eer_threshold = thresholds[eer_threshold_idx]
+    print(f"\nEER: {eer:.4f} at threshold={eer_threshold:.4f}")
 
+    # Save model
     model_path = os.path.join(DATA_DIR, MODEL_OUTPUT_FILE)
-    torch.save(model.state_dict(), model_path)
-    print(f"Classifier trained and saved to {model_path}.")
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'threshold': float(eer_threshold),
+        'eer': float(eer),
+        'test_acc': float(test_acc),
+        'test_auc': float(test_auc),
+        'test_f1': float(test_f1),
+        'input_dim': int(features.shape[1]),
+    }, model_path)
+    print(f"Model and metadata saved to {model_path}.")

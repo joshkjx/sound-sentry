@@ -1,3 +1,4 @@
+from pyexpat import features
 import torch
 import torchaudio
 import numpy as np
@@ -52,8 +53,9 @@ def apply_tkan(activations_dict: dict, layer_names: list, k: int = 5) -> np.ndar
     features = []
     for name in layer_names:
         if name not in activations_dict:
+            features.extend([0.0] * k)
             continue  # Skip if layer not activated
-        arr = activations_dict[name].flatten()
+        arr = activations_dict[name].astype(np.float32).flatten()
         sorted_arr = np.sort(arr)
         # Pad with 0s if len(sorted_arr) < k
         top_k_values = np.pad(sorted_arr[-k:], (0, max(0, k - len(sorted_arr))))
@@ -67,4 +69,13 @@ def load_audio(file_path: str) -> torch.Tensor:
     waveform = waveform.mean(0, keepdim=True)  # To mono
     if sample_rate != 16000:
         waveform = torchaudio.functional.resample(waveform, sample_rate, 16000)
+
+    # Check duration
+    duration = waveform.shape[1] / 16000
+    if duration < 1.0:
+        # Pad with zeros to reach minimum duration
+        target_samples = 16000
+        padding = target_samples - waveform.shape[1]
+        waveform = torch.nn.functional.pad(waveform, (0, padding))
+
     return waveform
