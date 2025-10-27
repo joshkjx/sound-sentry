@@ -60,9 +60,13 @@ def load_models():
     return sr_model, model, threshold, activations_dict, hooks, diar_pipeline
     
 
-SR_MODEL, CLASSIFIER_MODEL, THRESHOLD, ACTIVATIONS_DICT, HOOKS, DIAR_PIPELINE = load_models()
-scaler_path = os.path.join(DATA_DIR, SCALER_OUTPUT_FILE)
-FEATURE_SCALER = joblib.load(scaler_path)
+SR_MODEL = CLASSIFIER_MODEL = THRESHOLD = ACTIVATIONS_DICT = HOOKS = DIAR_PIPELINE = FEATURE_SCALER = None
+
+def initialize():
+    global SR_MODEL, CLASSIFIER_MODEL, THRESHOLD, ACTIVATIONS_DICT, HOOKS, DIAR_PIPELINE, FEATURE_SCALER
+    SR_MODEL, CLASSIFIER_MODEL, THRESHOLD, ACTIVATIONS_DICT, HOOKS, DIAR_PIPELINE = load_models()
+    scaler_path = os.path.join(DATA_DIR, SCALER_OUTPUT_FILE)
+    FEATURE_SCALER = joblib.load(scaler_path)
 
 # Predicts fake probability for a single audio waveform.
 def predict_single_segment(waveform: torch.Tensor) -> float:
@@ -118,6 +122,8 @@ def predict_single_segment(waveform: torch.Tensor) -> float:
 # Differences from original DeepSonar:
 # - Added diarization integration.
 def predict(audio_path: str) -> dict:
+    if SR_MODEL is None:
+        initialize()
     results = {"overall": "Real", "details": []}
 
     if not os.path.exists(audio_path):
@@ -198,13 +204,13 @@ def predict(audio_path: str) -> dict:
         waveform = load_audio(audio_path).to(DEVICE)
         prob_fake = predict_single_segment(waveform)
         result = "Fake" if prob_fake > THRESHOLD else "Real"
-        
+
         results["details"].append({
             "segment": "full",
             "prob_fake": prob_fake,
             "result": result
         })
-        
+
         if result == "Fake":
             results["overall"] = "Fake"
     
@@ -228,7 +234,7 @@ def predict(audio_path: str) -> dict:
 # Example usage
 if __name__ == "__main__":
     # Test file
-    audio_file = os.path.join(DATA_DIR, DATASET, "301.wav")
+    audio_file = os.path.join(DATA_DIR, DATASET, "33.wav")
     
     if not os.path.exists(audio_file):
         print(f"Test file not found: {audio_file}")
@@ -258,5 +264,6 @@ if __name__ == "__main__":
             print(f"  [{speaker}] {time}: {result} (p={prob:.4f})")
 
 # Cleanup hooks
-for hook in HOOKS:
-    hook.remove()
+if HOOKS:
+    for hook in HOOKS:
+        hook.remove()
