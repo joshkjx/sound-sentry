@@ -73,17 +73,23 @@ class AudioProcessor {
     // MESSAGE HANDLING
     // ============================================
     handleContentScriptMessage(message, port) {
+
         switch (message.type) {
             case "AUDIO_CHUNK":
-                this.handleAudioChunk(message.blob, message.timestamp, message.duration, message.videoUrl, message.videoTitle, message.playbackTimestamp ,port);
+                this.handleAudioChunk(message.audioData, message.mimeType, message.timestamp, message.duration, message.videoUrl, message.videoTitle, message.playbackTimestamp ,port);
                 break;
         }
     }
-    async handleAudioChunk(blob, timestamp, duration, videoUrl, videoTitle, playbackTimestamp, port) {
+    async handleAudioChunk(audioData, mimeType, timestamp, duration, videoUrl, videoTitle, playbackTimestamp, port) {
         try {
             console.log('Service worker received audio chunk!');
+
+            //Reconstruct blob from ArrayBuffer
+            const blob = new Blob([audioData], {type:mimeType});
+
             // Send audio data to API endpoint for processing
             const data = await this.sendToASRService(blob);
+
             // Build metadata for visualisation handling (maybe)
             const metadata = {
                 framecount: 0, // TODO
@@ -102,6 +108,7 @@ class AudioProcessor {
                 chunkVideoUrl = videoUrl;
             }
             this.setLatestData(data, metadata, chunkVideoTitle, chunkVideoUrl);
+
             this.sendProcessedAudio(port, data, this.latestAudioMetadata); // send audio back to content script on received port
             console.log('Broadcasting to popups...');
             this.broadcastToPopups(this.latestAudioData, this.latestAudioMetadata);
@@ -120,7 +127,6 @@ class AudioProcessor {
         this.latestAudioData = data;
         this.latestAudioMetadata = metadata;
         const currTime = Date.now();
-        this.currentRecordingSessionChunksProcessed++;
         if (this.currentRecordingSessionChunksProcessed !== data.chunksReceivedCount) {
             console.warn('WARNING - chunks processed by service worker not equal to chunks received by API. Potential desync.');
         }
@@ -142,13 +148,39 @@ class AudioProcessor {
     // API COMMUNICATION
     // ============================================
     async sendToASRService(blob) {
-        // TODO: Convert blob to format needed by API
-        // TODO: Make HTTP request to ASR endpoint
-        // TODO: Parse and return response
-        if (this.testingMode) { // Uses Mock Api if testing mode, otherwise falls back to API gateway.
-            return this.testingUtil.getResponse(blob);
+        const API_ENDPOINT = 'http://localhost:8000/inference'; // Change this to actual API endpoint later
+
+        this.currentRecordingSessionChunksProcessed++;
+
+        const formData = new FormData();
+        formData.append('audio',blob,'audio-chunk.webm');
+
+        formData.append('chunkNumber', this.currentRecordingSessionChunksProcessed.toString());
+        formData.append('timestamp', Date.now().toString());
+
+        try {
+            const response = await fetch(API_ENDPOINT,{
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error(`API Request failed: ${response.status} ${response.status}`);
+            }
+
+            // Quick function for logging received response
+            const data = await response.json();
+            // console.log('Parsed response data:', data);
+
+            return {
+                decision: data.decision,
+                confidence: data.confidence,
+                chunksReceivedCount: this.currentRecordingSessionChunksProcessed
+            };
+        } catch (e) {
+            console.error('Error sending audio to ASR service: ', e);
+            throw e;
         }
-        throw new Error('Not implemented');
     }
     // ============================================
     // RESPONSE HANDLING
@@ -281,4 +313,4 @@ class MockApiTest {
 // ============================================
 const processor = new AudioProcessor();
 // Comment out below line if not testing with mock API
-processor.activateTestMode(true, "SUCCESS");
+// processor.activateTestMode(true, "SUCCESS");

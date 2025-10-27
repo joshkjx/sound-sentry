@@ -35,6 +35,7 @@ class AudioCapture {
     connectPort() {
         this.port = chrome.runtime.connect({ name: 'audio-capture' });
         this.port.onMessage.addListener((message) => {
+            console.log("Service Worker Message Received")
             this.handleServiceWorkerMessage(message);
         });
         this.port.onDisconnect.addListener(() => {
@@ -49,6 +50,7 @@ class AudioCapture {
     handleServiceWorkerMessage(message) {
         switch (message.type) {
             case 'PROCESSED_AUDIO':
+                console.log("Audio Successfully Processed");
                 this.handleProcessedAudio(message.data, message.metadata);
                 break;
             case 'PROCESSING_ERROR':
@@ -305,7 +307,7 @@ class AudioCapture {
     // AUDIO CHUNK HANDLING
     // ============================================
     // Function to process each blob of 3s recorded data
-    handleAudioChunk(blob) {
+    async handleAudioChunk(blob) {
         if (this.vidCaptureTimeout){ // If timeout is active, clear the timeout
             clearTimeout(this.vidCaptureTimeout);
             this.vidCaptureTimeout = null;
@@ -333,9 +335,13 @@ class AudioCapture {
         console.log(`Audio chunk ${this.chunkCount}: ${blob.size} bytes, ${blob.type}`);
         if (this.port) { //sends chunk to service worker
             console.log('Attempting to post to Service Worker...');
+
+            const arrayBuffer = await blob.arrayBuffer();
+
             this.port.postMessage({
                 type: 'AUDIO_CHUNK',
-                blob: blob,
+                audioData: arrayBuffer,
+                mimeType: blob.type,
                 timestamp: now,
                 duration: duration,
                 videoUrl: metadata.url,
@@ -361,6 +367,9 @@ class AudioCapture {
         const decision = data.decision;
         const confidence = data.confidence;
         const chunkCount = data.chunksReceivedCount;
+        console.log("Decision: " + decision);
+        console.log("Confidence: " + confidence);
+        console.log("Chunks Received:" + chunkCount);
     }
 }
 // ============================================
