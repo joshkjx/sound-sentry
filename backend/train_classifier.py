@@ -14,6 +14,22 @@ from utils import (
     DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE, 
     SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE
 )
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+@app.get("/inference")
+async def perform_inference(item):
+    """
+    Receives item data via a POST request and returns the processed version of the data
+    """
+    audio = item.data
+    return process_audio(audio)
+
 
 # Binary neural network for real/fake classification.
 # Differences from original DeepSonar:
