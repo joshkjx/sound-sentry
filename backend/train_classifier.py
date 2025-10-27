@@ -172,6 +172,8 @@ if __name__ == "__main__":
     best_val_loss = float('inf')
     patience = 1000  # Stop if no improvement for 1000 epochs
     counter = 0
+    best_state = None
+    best_epoch = 0
     for epoch in range(10000):
         model.train()
         optimizer.zero_grad()
@@ -202,12 +204,19 @@ if __name__ == "__main__":
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             counter = 0
+            best_epoch = epoch + 1
+            best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            torch.save(best_state, os.path.join(DATA_DIR, "best_model.pth"))
         else:
             counter += 1
             if counter >= patience:
                 print(f"Early stopping at epoch {epoch+1}")
                 break
 
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        print(
+            f"\nLoaded best model from epoch {best_epoch} with val_loss={best_val_loss:.4f}")
     # Test evaluation
     model.eval()
     with torch.no_grad():
