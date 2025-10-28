@@ -10,26 +10,15 @@ import joblib
 import os
 from sklearn.metrics import roc_curve
 from imblearn.over_sampling import SMOTE
-from utils import (
+from .utils import (
     DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE, 
     SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE
 )
-from fastapi import FastAPI
+# Prevent terminal clearing on Windows
+os.environ['LOKY_MAX_CPU_COUNT'] = '1'
+os.environ['JOBLIB_START_METHOD'] = 'spawn'
 
-app = FastAPI()
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-@app.get("/inference")
-async def perform_inference(item):
-    """
-    Receives item data via a POST request and returns the processed version of the data
-    """
-    audio = item.data
-    return process_audio(audio)
-
+VERBOSE = False
 
 # Binary neural network for real/fake classification.
 # Differences from original DeepSonar:
@@ -64,8 +53,9 @@ if __name__ == "__main__":
     features = np.load(features_path)
     labels = np.load(labels_path)
 
-    print("\nLabel distribution:")
-    print(pd.Series(labels).value_counts())
+    if VERBOSE:
+        print("\nLabel distribution:")
+        print(pd.Series(labels).value_counts())
 
     # Split data: 60/20/20 with stratification
     features_train, features_temp, labels_train, labels_temp = train_test_split(
@@ -74,22 +64,24 @@ if __name__ == "__main__":
         features_temp, labels_temp, test_size=0.5, stratify=labels_temp,
         random_state=4347)
     
-    # print(f"\nTrain set: {features_train.shape[0]} samples")
-    # print(f"Val set: {features_val.shape[0]} samples")
-    # print(f"Test set: {features_test.shape[0]} samples")
+    if VERBOSE:
+        print(f"\nTrain set: {features_train.shape[0]} samples")
+        print(f"Val set: {features_val.shape[0]} samples")
+        print(f"Test set: {features_test.shape[0]} samples")
     
-    # print(f"Train features before scaling:")
-    # print(f"  Mean: {features_train.mean():.2f}")
-    # print(f"  Std: {features_train.std():.2f}")
-    # print(f"  Min: {features_train.min():.2f}")
-    # print(f"  Max: {features_train.max():.2f}")
+        print(f"Train features before scaling:")
+        print(f"  Mean: {features_train.mean():.2f}")
+        print(f"  Std: {features_train.std():.2f}")
+        print(f"  Min: {features_train.min():.2f}")
+        print(f"  Max: {features_train.max():.2f}")
 
     # Check per-feature variance
     per_feature_std = features_train.std(axis=0)
-    # print(f"\nPer-feature std statistics:")
-    # print(f"  Min: {per_feature_std.min():.6f}")
-    # print(f"  Max: {per_feature_std.max():.2f}")
-    # print(f"  Mean: {per_feature_std.mean():.2f}")
+    if VERBOSE:
+        print(f"\nPer-feature std statistics:")
+        print(f"  Min: {per_feature_std.min():.6f}")
+        print(f"  Max: {per_feature_std.max():.2f}")
+        print(f"  Mean: {per_feature_std.mean():.2f}")
 
     # Identify low-variance features
     low_var_threshold = 0.01  # Features with std < 0.01 are nearly constant
@@ -120,17 +112,18 @@ if __name__ == "__main__":
             print("   Error: Scaler not fitted properly")
 
     # Verify scaler parameters
-    # print(f"\nScaler parameters:")
-    # if feature_scaler.mean_ is not None:
-    #     print(f"  Mean (avg): {feature_scaler.mean_.mean():.2f}")
-    # else:
-    #     print("  Mean: None (scaler not fitted)")
-    # if feature_scaler.scale_ is not None:
-    #     print(f"  Scale (avg): {feature_scaler.scale_.mean():.2f}")
-    #     print(f"  Scale (min): {feature_scaler.scale_.min():.2f}")
-    #     print(f"  Scale (max): {feature_scaler.scale_.max():.2f}")
-    # else:
-    #     print("  Scale: None (scaler not fitted)")
+    if VERBOSE:
+        print(f"\nScaler parameters:")
+        if feature_scaler.mean_ is not None:
+            print(f"  Mean (avg): {feature_scaler.mean_.mean():.2f}")
+        else:
+            print("  Mean: None (scaler not fitted)")
+        if feature_scaler.scale_ is not None:
+            print(f"  Scale (avg): {feature_scaler.scale_.mean():.2f}")
+            print(f"  Scale (min): {feature_scaler.scale_.min():.2f}")
+            print(f"  Scale (max): {feature_scaler.scale_.max():.2f}")
+        else:
+            print("  Scale: None (scaler not fitted)")
 
     # Apply scaling
     features_train_scaled = feature_scaler.transform(features_train)
@@ -138,11 +131,12 @@ if __name__ == "__main__":
     features_test = feature_scaler.transform(features_test)
 
     # Verify scaling worked
-    # print(f"\nTrain features after scaling:")
-    # print(f"  Mean: {features_train_scaled.mean():.6f} (should be ~0)")
-    # print(f"  Std: {features_train_scaled.std():.6f} (should be ~1)")
-    # print(f"  Min: {features_train_scaled.min():.2f}")
-    # print(f"  Max: {features_train_scaled.max():.2f}")
+    if VERBOSE:
+        print(f"\nTrain features after scaling:")
+        print(f"  Mean: {features_train_scaled.mean():.6f} (should be ~0)")
+        print(f"  Std: {features_train_scaled.std():.6f} (should be ~1)")
+        print(f"  Min: {features_train_scaled.min():.2f}")
+        print(f"  Max: {features_train_scaled.max():.2f}")
 
     if abs(features_train_scaled.mean()) > 0.01 or abs(features_train_scaled.std() - 1.0) > 0.1:
         print("\nERROR: Scaling verification failed!")
@@ -154,16 +148,42 @@ if __name__ == "__main__":
     joblib.dump(feature_scaler, scaler_path)
     print(f"\nScaler saved to {scaler_path}")
 
+    # Augment with noise (doubles training data)
+    print("\nAugmenting training data with various noise levels...")
+
+    # Create 3 augmented versions with different noise levels
+    augmented_features_list = [features_train_scaled]  # Original
+    augmented_labels_list = [labels_train]
+
+    # 1. Noise augmentation (keeps full length)
+    print("  Adding noise augmentation...")
+    for noise_level, sigma in [('light', 0.005), ('medium', 0.01), ('heavy', 0.02)]:
+        noise = features_train_scaled + np.random.randn(*features_train_scaled.shape) * sigma
+        augmented_features_list.append(noise)
+        augmented_labels_list.append(labels_train)
+        print(f"    - {noise_level} noise (σ={sigma}): {noise.shape[0]} samples")
+
+    # Combine all
+    features_train_augmented = np.vstack(augmented_features_list)
+    labels_train_augmented = np.hstack(augmented_labels_list)
+
+    print(f"After noise augmentation: {features_train_augmented.shape[0]} samples")
+    print(f"  Original: {features_train_scaled.shape[0]}")
+    print(f"  Light noise: {features_train_scaled.shape[0]}")
+    print(f"  Medium noise: {features_train_scaled.shape[0]}")
+    print(f"  Heavy noise: {features_train_scaled.shape[0]}")
+
     # Classification with imbalanced classes by performing over-sampling.
     # Differences from original DeepSonar:
     # - Apply SMOTE to train data for imbalance 
     smote = SMOTE(random_state=4347)
-    resample_result = smote.fit_resample(features_train_scaled, labels_train)
+    resample_result = smote.fit_resample(features_train_augmented, labels_train_augmented)
     features_train_res, labels_train_res = resample_result[0], resample_result[1]
 
-    print(f"After SMOTE: {features_train_res.shape[0]} samples")
-    print(f"Label distribution after SMOTE:")
-    print(pd.Series(np.array(labels_train_res)).value_counts())
+    if VERBOSE:
+        print(f"After SMOTE: {features_train_res.shape[0]} samples")
+        print(f"Label distribution after SMOTE:")
+        print(pd.Series(np.array(labels_train_res)).value_counts())
 
     # Convert to tensors
     features_train_tensor = torch.tensor(features_train_res, dtype=torch.float32)
@@ -180,17 +200,15 @@ if __name__ == "__main__":
     criterion = nn.BCEWithLogitsLoss()  # Handles logits directly
     optimizer = optim.Adam(
         model.parameters(),
-        lr=0.0001,
+        lr=0.001,            # faster learning
         betas=(0.9, 0.999),  # beta1 matches the SGD momentum
-        weight_decay=1e-6    # Approximates the decay as L2 regularization
+        weight_decay=1e-4    # more regularization than L2
     )
     
     best_val_loss = float('inf')
-    patience = 1000  # Stop if no improvement for 1000 epochs
+    patience = 100  # Stop if no improvement for 100 epochs
     counter = 0
-    best_state = None
-    best_epoch = 0
-    for epoch in range(10000):
+    for epoch in range(1000):
         model.train()
         optimizer.zero_grad()
         output = model(features_train_tensor.to(DEVICE))
@@ -211,7 +229,7 @@ if __name__ == "__main__":
             val_auc = roc_auc_score(labels_val, val_prob)
             val_f1 = f1_score(labels_val, val_pred)
         
-        if (epoch + 1) % 1000 == 0:
+        if (epoch + 1) % 100 == 0:
             print(f"Epoch {epoch+1}: train_loss={loss.item():.6f}, "
                   f"val_loss={val_loss:.4f}, val_acc={val_acc:.3f}, "
                   f"val_auc={val_auc:.3f}, val_f1={val_f1:.3f}")
@@ -220,19 +238,12 @@ if __name__ == "__main__":
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             counter = 0
-            best_epoch = epoch + 1
-            best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-            torch.save(best_state, os.path.join(DATA_DIR, "best_model.pth"))
         else:
             counter += 1
             if counter >= patience:
                 print(f"Early stopping at epoch {epoch+1}")
                 break
 
-    if best_state is not None:
-        model.load_state_dict(best_state)
-        print(
-            f"\nLoaded best model from epoch {best_epoch} with val_loss={best_val_loss:.4f}")
     # Test evaluation
     model.eval()
     with torch.no_grad():

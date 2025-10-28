@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 from pyannote.audio import Model, Pipeline
 import pandas as pd
-from utils import (
+from .utils import (
     register_hooks, load_audio, apply_tkan, DATA_DIR,
     DATASET, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE,
     LAYER_NAMES, DEVICE, TOP_K

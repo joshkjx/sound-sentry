@@ -5,6 +5,7 @@ import numpy as np
 
 # Constants for paths and params
 DATA_DIR = "data"
+MODEL_DIR = "model"
 DATASET = "release-in-the-wild"
 FEATURES_OUTPUT_FILE = "features.npy"
 LABELS_OUTPUT_FILE = "labels.npy"
@@ -64,9 +65,8 @@ def apply_tkan(activations_dict: dict, layer_names: list, k: int = 5) -> np.ndar
 
 # Loads audio, averages to mono and resamples to 16kHz.
 # Ensures mono for consistency, as pyannote expects it.
-def load_audio(file_path: str) -> torch.Tensor:
-    waveform, sample_rate = torchaudio.load(file_path)
-    # waveform, sample_rate = torchaudio.load_with_torchcodec(file_path) # depends on ffmpeg (or sth else) version
+def load_audio(file_path: str) -> tuple:
+    waveform, sample_rate = torchaudio.load_with_torchcodec(file_path)
     waveform = waveform.mean(0, keepdim=True)  # To mono
     if sample_rate != 16000:
         waveform = torchaudio.functional.resample(waveform, sample_rate, 16000)
@@ -79,4 +79,4 @@ def load_audio(file_path: str) -> torch.Tensor:
         padding = target_samples - waveform.shape[1]
         waveform = torch.nn.functional.pad(waveform, (0, padding))
 
-    return waveform
+    return waveform, duration

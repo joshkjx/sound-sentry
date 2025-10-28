@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Deepfake Detector</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 10px;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result.fake {
+            background: #fee;
+            border: 2px solid #fcc;
+        }
+
+        .result.real {
+            background: #efe;
+            border: 2px solid #cfc;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .result-icon {
+            font-size: 40px;
+            margin-right: 15px;
+        }
+
+        .result-title {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .result.fake .result-title {
+            color: #c00;
+        }
+
+        .result.real .result-title {
+            color: #0a0;
+        }
+
+        .result-details {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .result-detail {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .progress-bar {
+            background: #f0f0f0;
+            border-radius: 10px;
+            height: 20px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.5s ease;
+        }
+
+        .file-name {
+            color: #667eea;
+            font-weight: 600;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+
+        .error {
+            background: #fee;
+            border: 2px solid #fcc;
+            color: #c00;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Audio Deepfake Detector</h1>
+        <p class="subtitle">Upload an audio file to check if it's AI-generated or real</p>
+        
+        <div style="background: #f0f2ff; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <span id="apiDisplay" style="color: #667eea;">API: Loading...</span>
+            <button onclick="changeAPI()" style="padding: 5px 15px; font-size: 12px; width: auto;">Change</button>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <p><strong>Click to upload</strong> or drag and drop</p>
+            <p style="font-size: 12px; color: #999; margin-top: 10px;">
+                Supports WAV, MP3, FLAC, OGG, M4A
+            </p>
+        </div>
+
+        <input type="file" id="fileInput" accept="audio/*">
+        <div class="file-name" id="fileName"></div>
+
+        <button id="analyzeBtn" onclick="analyzeAudio()" disabled>
+            Analyze Audio
+        </button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; color: #666;">Analyzing...</p>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="result" id="result">
+            <div class="result-header">
+                <div class="result-icon" id="resultIcon"></div>
+                <div class="result-title" id="resultTitle"></div>
+            </div>
+            <div class="result-details">
+                <div class="result-detail">
+                    <span>Confidence:</span>
+                    <span id="confidence"></span>
+                </div>
+                <div class="result-detail">
+                    <span>Duration:</span>
+                    <span id="duration"></span>
+                </div>
+                <div class="result-detail">
+                    <span>Category:</span>
+                    <span id="category"></span>
+                </div>
+                <div class="result-detail">
+                    <span>Probability (Fake):</span>
+                    <span id="probability"></span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get API URL from URL parameter or prompt user
+        const urlParams = new URLSearchParams(window.location.search);
+        let API_URL = urlParams.get('api') || localStorage.getItem('api_url') || 'http://127.0.0.1:8000';
+        
+        // Prompt user to configure API URL on first load
+        if (!localStorage.getItem('api_url')) {
+            const userInput = prompt('Enter API URL (press Cancel for default):', API_URL);
+            if (userInput) {
+                API_URL = userInput;
+                localStorage.setItem('api_url', API_URL);
+            }
+        }
+        
+        // Display current API URL
+        console.log('Using API:', API_URL);
+        
+        let selectedFile = null;
+
+        // Setup upload area
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const fileName = document.getElementById('fileName');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            selectedFile = file;
+            fileName.textContent = `Selected: ${file.name}`;
+            analyzeBtn.disabled = false;
+            hideResult();
+            hideError();
+        }
+
+        async function analyzeAudio() {
+            if (!selectedFile) return;
+
+            showLoading();
+            hideResult();
+            hideError();
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const response = await fetch(`${API_URL}/predict`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Prediction failed');
+                }
+
+                const result = await response.json();
+                displayResult(result);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayResult(data) {
+            const resultDiv = document.getElementById('result');
+            const isFake = data.overall === 'Fake';
+
+            resultDiv.className = `result ${isFake ? 'fake' : 'real'}`;
+            document.getElementById('resultIcon').textContent = isFake ? '🔴' : '🟢';
+            document.getElementById('resultTitle').textContent = data.overall;
+
+            const probability = (data.mean_probability * 100).toFixed(1);
+            const confidence = (data.confidence * 100).toFixed(1);
+            
+            document.getElementById('probability').textContent = `${probability}%`;
+            document.getElementById('confidence').textContent = `${confidence}%`;
+
+            if (data.duration_config) {
+                document.getElementById('duration').textContent = 
+                    `${data.duration_config.duration.toFixed(1)}s`;
+                document.getElementById('category').textContent = 
+                    data.duration_config.category;
+            }
+
+            document.getElementById('progressFill').style.width = `${probability}%`;
+
+            resultDiv.style.display = 'block';
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            analyzeBtn.disabled = true;
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+            analyzeBtn.disabled = false;
+        }
+
+        function hideResult() {
+            document.getElementById('result').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = `Error: ${message}`;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+        
+        function changeAPI() {
+            const newURL = prompt('Enter new API URL:', API_URL);
+            if (newURL) {
+                API_URL = newURL;
+                localStorage.setItem('api_url', API_URL);
+                updateAPIDisplay();
+                // Test connection
+                test_health().then(success => {
+                    if (!success) {
+                        alert('Warning: Cannot connect to API at ' + API_URL);
+                    }
+                });
+            }
+        }
+        
+        function updateAPIDisplay() {
+            document.getElementById('apiDisplay').textContent = `API: ${API_URL}`;
+        }
+        
+        async function test_health() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                return response.ok;
+            } catch (error) {
+                return false;
+            }
+        }
+        
+        // Initialize API display and test connection
+        updateAPIDisplay();
+        test_health().then(success => {
+            const display = document.getElementById('apiDisplay');
+            if (success) {
+                display.style.color = '#0a0';
+                display.textContent = `API: ${API_URL} ✓`;
+            } else {
+                display.style.color = '#c00';
+                display.textContent = `API: ${API_URL} ✗`;
+            }
+        });
+    </script>
+</body>
+</html>
