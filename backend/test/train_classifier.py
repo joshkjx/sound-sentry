@@ -22,12 +22,10 @@ VERBOSE = False
 
 # Binary neural network for real/fake classification.
 # Differences from original DeepSonar:
-# - Added dropout (0.3) to each hidden layer for regularisation (paper had no dropout).
-# - Uses fixed hidden size (256) x4 instead of decreasing (512-256-128-64).
-
-
+# - Added dropout (0.5) to each hidden layer for regularisation (paper had no dropout).
+# - Uses fixed hidden size (512) x4 instead of decreasing (512-256-128-64).
 class BinaryClassifier(nn.Module):
-    def __init__(self, input_dim: int, hidden_size: int = 256, dropout_rate: float = 0.5):
+    def __init__(self, input_dim: int, hidden_size: int, dropout_rate: float):
         super().__init__()
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_size),
@@ -50,7 +48,6 @@ class BinaryClassifier(nn.Module):
 
 
 if __name__ == "__main__":
-    
     # Best hyperparameter set obtained from gridsearch
     BEST_LR = 0.0005
     BEST_WEIGHT_DECAY = 1e-5
@@ -100,6 +97,8 @@ if __name__ == "__main__":
         print(f"  Mean: {per_feature_std.mean():.2f}")
 
     # Identify low-variance features
+    # Differences from original DeepSonar:
+    # - Added handling for low-variance features to avoid scaling issues.
     low_var_threshold = 0.01  # Features with std < 0.01 are nearly constant
     low_var_mask = per_feature_std < low_var_threshold
     num_low_var = low_var_mask.sum()
@@ -168,13 +167,15 @@ if __name__ == "__main__":
     print(f"\nScaler saved to {scaler_path}")
 
     # Augment with noise (doubles training data)
+    # Differences from original DeepSonar:
+    # - Added noise augmentation to improve robustness.
     print("\nAugmenting training data with various noise levels...")
 
     # Create 3 augmented versions with different noise levels
     augmented_features_list = [features_train_scaled]  # Original
     augmented_labels_list = [labels_train]
 
-    # 1. Noise augmentation (keeps full length)
+    # Noise augmentation (keeps full length)
     print("  Adding noise augmentation...")
     for noise_level, sigma in [('light', 0.005), ('medium', 0.01), ('heavy', 0.02)]:
         noise = features_train_scaled + \
@@ -220,13 +221,18 @@ if __name__ == "__main__":
     # Setup model, loss, optimiser
     # Differences from original DeepSonar:
     # - Adam instead of SGD, added weight_decay.
-    model = BinaryClassifier(input_dim=features.shape[1]).to(DEVICE)
+    model = BinaryClassifier(input_dim=features.shape[1],
+                             hidden_size=BEST_HIDDEN_SIZE,
+                             dropout_rate=BEST_DROPOUT_RATE).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()  # Handles logits directly
     optimizer = optim.Adam(
         model.parameters(),
-        lr=0.001,            # faster learning
-        betas=(0.9, 0.999),  # beta1 matches the SGD momentum
-        weight_decay=1e-4    # more regularization than L2
+        # Lower learning rate for smoother convergence
+        lr=BEST_LR,
+        # beta1 similar to SGD momentum, beta2 controls long-term average
+        betas=(0.9, 0.999),
+        # Small L2 regularization to prevent overfitting
+        weight_decay=BEST_WEIGHT_DECAY
     )
 
     best_val_loss = float('inf')

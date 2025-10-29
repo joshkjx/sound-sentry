@@ -6,7 +6,7 @@ from utils import DATA_DIR, DATASET
 if __name__ == "__main__":
     classifier = AudioClassifier()
 
-    for i in range(10):
+    for i in range(100):
         audio_file = os.path.join(DATA_DIR, DATASET, f"{i}.wav")
 
         if not os.path.exists(audio_file):

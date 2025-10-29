@@ -1,25 +1,25 @@
 import torch
-import torchaudio
 import numpy as np
-from pyannote.audio import Model, Pipeline, Inference
-from train_classifier import BinaryClassifier
 import joblib
 import os
-from pydub import AudioSegment
 import pandas as pd
+import warnings
+import logging
+import noisereduce as nr
+from pyannote.audio import Model, Pipeline, Inference
+from train_classifier import BinaryClassifier
 from utils import ( 
     register_hooks, load_audio, apply_tkan,
     DATA_DIR, MODEL_DIR, DATASET, SCALER_OUTPUT_FILE,
-    MODEL_OUTPUT_FILE, LAYER_NAMES, DEVICE, TOP_K
+    MODEL_OUTPUT_FILE, LAYER_NAMES, DEVICE, TOP_K,
+    BEST_HIDDEN_SIZE, BEST_DROPOUT_RATE
 )
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from omegaconf.listconfig import ListConfig
 from omegaconf.base import ContainerMetadata
 from typing import Optional
-import warnings
-import logging
-import hashlib
+from scipy.signal import butter, filtfilt
 
 # Set logging level for lightning to ERROR to reduce verbosity
 logging.getLogger("lightning.pytorch.utilities.migration").setLevel(logging.ERROR)
@@ -33,6 +33,17 @@ warnings.filterwarnings("ignore", category=RuntimeWarning, module=r"numpy\._core
 torch.serialization.add_safe_globals([EarlyStopping, ModelCheckpoint, ListConfig, ContainerMetadata])
 
 VERBOSE = True
+
+# Noise reduction settings
+ENABLE_NOISE_REDUCTION = True
+
+# VAD parameters based on pyannote/voice-activity-detection
+VAD_HYPER_PARAMETERS = {
+    "onset": 0.90,              # Much stricter for cafe noise
+    "offset": 0.55,
+    "min_duration_on": 0.3,
+    "min_duration_off": 0.3
+}
 
 # Duration-based threshold ADJUSTMENTS (relative to base EER threshold)
 # These are multipliers/offsets applied to the model's trained EER threshold
@@ -82,7 +93,9 @@ class AudioClassifier:
         # Load classifier with metadata
         feature_dim = len(LAYER_NAMES) * TOP_K
         model_path = os.path.join(DATA_DIR, MODEL_OUTPUT_FILE)
-        self.classifier_model = BinaryClassifier(input_dim=feature_dim)
+        self.classifier_model = BinaryClassifier(input_dim=feature_dim,
+                                                 hidden_size=BEST_HIDDEN_SIZE,
+                                                 dropout_rate=BEST_DROPOUT_RATE)
         checkpoint = torch.load(model_path, map_location=DEVICE)
 
         # Extract threshold
@@ -127,8 +140,16 @@ class AudioClassifier:
         if self.vad_model is None:
             raise RuntimeError("Failed to load segmentation model from local or online source")
         self.vad_model = self.vad_model.to("cpu")
-        self.vad_infer = Inference(self.vad_model, window="whole", device=torch.device("cpu"))
         self.vad_model.eval()
+
+        # Setup VAD using inference with optimized threshold
+        self.vad_infer = Inference(self.vad_model, window="whole", device=torch.device("cpu"))
+        
+        # Store optimized threshold (higher = less sensitive)
+        self.vad_speech_threshold = VAD_HYPER_PARAMETERS['onset']
+        
+        if VERBOSE:
+            print(f"VAD threshold: {self.vad_speech_threshold}")
         
         # Load feature scaler
         scaler_path = os.path.join(DATA_DIR, SCALER_OUTPUT_FILE)
@@ -166,6 +187,42 @@ class AudioClassifier:
             print(f"  Diarization: {adjustment_config['use_diarization']}")
         
         return config
+    
+    # Differences from original DeepSonar:
+    # Apply high-pass filter to remove low-frequency cafe rumble and background noise.
+    # data: Audio data (numpy array)
+    # cutoff: Cutoff frequency in Hz (default: 200 Hz removes most cafe rumble)
+    # fs: Sample rate
+    # order: Filter order (higher = sharper cutoff)
+    def highpass_filter(self, data, cutoff, fs, order=5):
+        nyq = 0.5 * fs
+        normal_cutoff = cutoff / nyq
+        b, a = butter(order, normal_cutoff, btype='high', analog=False) # type: ignore
+        return filtfilt(b, a, data)
+
+    # Preprocess audio waveform in-memory to reduce background noise.
+    # waveform: Audio waveform tensor [channels, samples]
+    # method: Noise reduction method ("highpass", "noisereduce", "none")
+    # sample_rate: Sample rate of audio
+    def preprocess_waveform(self, waveform):
+        # Convert to numpy
+        audio_np = waveform.cpu().numpy()
+        
+        # Handle mono/stereo
+        if audio_np.ndim == 1:
+            audio_np = audio_np.reshape(1, -1)
+        
+        # Process each channel
+        processed_channels = []
+        for channel in audio_np:
+            processed = self.highpass_filter(channel, cutoff=200, fs=16000)
+            processed_channels.append(processed)
+        
+        # Convert back to tensor
+        processed_np = np.array(processed_channels)
+        processed_tensor = torch.from_numpy(processed_np).float()
+        
+        return processed_tensor
 
     # Predicts fake probability for a single audio waveform.
     def predict_single_segment(self, waveform: torch.Tensor) -> float:
@@ -303,38 +360,87 @@ class AudioClassifier:
     # Returns True if at least one segment exceeds 0.5 confidence for speech.
     def has_speech(self, waveform: torch.Tensor) -> bool:
         try:
-            # Move to CPU for pyannote segmentation model
+            # Additional check: spectral characteristics
+            # Background noise tends to have more uniform spectral energy
+            audio_np = waveform.cpu().numpy().flatten()
+            
+            # Check spectral flatness (high = noise-like, low = tonal/speech)
+            # This helps distinguish pure noise from speech in noise
+            fft = np.fft.rfft(audio_np)
+            magnitude = np.abs(fft)
+            geometric_mean = np.exp(np.mean(np.log(magnitude + 1e-10)))
+            arithmetic_mean = np.mean(magnitude)
+            spectral_flatness = geometric_mean / (arithmetic_mean + 1e-10)
+            
+            if VERBOSE:
+                print(f"  Spectral flatness: {spectral_flatness:.3f} (>0.8 suggests noise)")
+            # If spectral flatness is too high, likely just noise
+            if spectral_flatness > 0.8:
+                if VERBOSE:
+                    print("  Rejected: too noise-like (high spectral flatness)")
+                return False
+
+            # Move to CPU for VAD
             wf = waveform.detach().to("cpu")
 
-            # Run inference — MUST be a dict with a torch Tensor, not numpy
+            # Run inference
             scores = self.vad_infer({"waveform": wf, "sample_rate": 16000})
 
-            # Extract posterior matrix (SlidingWindowFeature -> np array)
+            # Extract posterior matrix
             scores_obj = scores[0] if isinstance(scores, tuple) else scores
             post = np.asarray(scores_obj.data) if hasattr(scores_obj, "data") else np.asarray(scores_obj)
-
+            
             # Speech class = column 1 for segmentation-3.0
             if post.ndim == 2 and post.shape[1] >= 2:
                 speech_prob = post[:, 1]
             else:
                 # fallback: single-prob track
                 speech_prob = post.reshape(-1)
-
-            # Threshold and compute speech ratio
-            speech_ratio = float(np.mean(speech_prob > 0.5))
-
+            
+            # Use adjusted threshold
+            speech_ratio = float(np.mean(speech_prob > self.vad_speech_threshold))
+            
             if VERBOSE:
-                print(f"Speech ratio (model-based): {speech_ratio:.3f}")
-
-            return bool(speech_ratio > 0.05)  # at least 5% of frames are speech
+                print(f"  Speech ratio (threshold={self.vad_speech_threshold}): {speech_ratio:.3f}")
+            
+            # Check for continuous background noise vs actual speech
+            # Real speech and deepfakes have variation in speech probability over time
+            # Pure background noise has more uniform/constant speech probability
+            if speech_ratio > 0.95:
+                # Calculate envelope variation in the audio signal
+                audio_np = waveform.cpu().numpy().flatten()
+                
+                # Compute short-time energy in 50ms windows
+                window_size = int(0.05 * 16000)  # 50ms at 16kHz
+                num_windows = len(audio_np) // window_size
+                
+                if num_windows > 2:
+                    energies = []
+                    for i in range(num_windows):
+                        window = audio_np[i*window_size:(i+1)*window_size]
+                        energy = np.mean(window**2)
+                        energies.append(energy)
+                    
+                    # Calculate coefficient of variation (std/mean) of energy
+                    energy_std = np.std(energies)
+                    energy_mean = np.mean(energies) + 1e-10
+                    energy_cv = energy_std / energy_mean
+                    
+                    if VERBOSE:
+                        print(f"  Energy coefficient of variation: {energy_cv:.4f}")
+                    
+                    # Very low energy variation = likely continuous background noise
+                    # Speech (real or fake) has energy modulation from phonemes/words
+                    if energy_cv < 0.5:  # Low variation = background noise
+                        if VERBOSE:
+                            print("  Rejected: low energy variation (continuous background noise)")
+                        return False
+            
+            return bool(speech_ratio > 0.10)
 
         except Exception as e:
-            print(f"VAD model failed: {e}")
+            print(f"VAD inference also failed: {e}")
             return False
-        finally:
-            # Restore waveform to its original device if needed
-            if waveform.device.type != DEVICE:
-                waveform = waveform.to(DEVICE)
 
     # Predicts on the supplied audio (inference).
     # If diarization enabled, segments speakers and predicts per segment.
@@ -359,12 +465,20 @@ class AudioClassifier:
 
         # Load the audio wav file
         waveform, duration = load_audio(audio_path)
+
+        # Create preprocessed version for VAD only (don't modify original for classification)
+        waveform_for_vad = waveform
+        if ENABLE_NOISE_REDUCTION:
+            if VERBOSE:
+                print(f"Preprocessing audio for VAD with high pass")
+            waveform_for_vad = self.preprocess_waveform(waveform)
+
         waveform = waveform.to(DEVICE)
 
         # Check for silence (very low energy)
         audio_energy = torch.abs(waveform).mean().item()
         # Return "No Speech" if audio is silent
-        if audio_energy < 0.01:
+        if audio_energy < 0.005:
             results["overall"] = "No Speech"
             results["message"] = "Audio is silent or contains no detectable speech"
             if VERBOSE:
@@ -378,7 +492,7 @@ class AudioClassifier:
                 print("  No speech: audio is too short (<1s)")
             return results
         
-        if not self.has_speech(waveform):
+        if not self.has_speech(waveform_for_vad):
             results["overall"] = "No Speech"
             results["message"] = "No human speech detected"
             if VERBOSE:

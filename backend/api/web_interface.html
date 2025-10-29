@@ -383,11 +383,13 @@
             document.getElementById('probability').textContent = 'N/A';
             document.getElementById('confidence').textContent = 'N/A';
             
-            // Safely get duration
-            const duration = result.duration_config?.duration;
+             // Safely get duration from duration_config array
+            const durationConfig = result.duration_config?.[0] || result.duration_config;
+            const duration = durationConfig?.duration;
             document.getElementById('duration').textContent = 
                 duration ? `${duration.toFixed(1)}s` : 'N/A';
-            document.getElementById('category').textContent = 'No Speech';
+            document.getElementById('category').textContent = 
+                durationConfig?.category || 'No Speech';
             
             // Hide progress bar
             document.getElementById('progressFill').style.width = '0%';
@@ -432,12 +434,13 @@
             document.getElementById('probability').textContent = `${probability}%`;
             document.getElementById('confidence').textContent = `${confidence}%`;
 
-            // Safely access duration_config
-            if (data.duration_config && data.duration_config.duration !== undefined) {
+             // Safely access duration_config (it's an array with one element)
+            const durationConfig = data.duration_config?.[0] || data.duration_config;
+            if (durationConfig && durationConfig.duration !== undefined) {
                 document.getElementById('duration').textContent = 
-                    `${data.duration_config.duration.toFixed(1)}s`;
+                    `${durationConfig.duration.toFixed(1)}s`;
                 document.getElementById('category').textContent = 
-                    data.duration_config.category || 'N/A';
+                    durationConfig.category || 'N/A';
             } else {
                 document.getElementById('duration').textContent = 'N/A';
                 document.getElementById('category').textContent = 'N/A';

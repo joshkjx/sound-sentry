@@ -13,6 +13,11 @@ SCALER_OUTPUT_FILE = "feature_scaler.pkl"
 MODEL_OUTPUT_FILE = "trained_model.pth"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 TOP_K = 5  # For TKAN
+# Best hyperparameter set obtained from gridsearch
+BEST_LR = 0.0005
+BEST_WEIGHT_DECAY = 1e-5
+BEST_HIDDEN_SIZE = 512
+BEST_DROPOUT_RATE = 0.5
 
 # List of layers to monitor in the pyannote embedding model.
 # Differences from original DeepSonar:
