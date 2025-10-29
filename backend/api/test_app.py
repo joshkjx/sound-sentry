@@ -73,51 +73,60 @@ def print_result(result: dict):
     prob = result.get('mean_probability', 0.0)
     conf = result.get('confidence', 0.0)
     
-    emoji = "🔴" if overall == "Fake" else "🟢"
-    print(f"\n{emoji} Overall: {overall}")
-    print(f"   Probability (Fake): {prob:.4f}")
-    print(f"   Confidence: {conf:.4f}")
+    if overall == "No Speech":
+        print(f"\n   Overall: {overall}")
+        message = result.get('message', 'No speech detected in audio')
+        print(f"   Message: {message}")
+        print(f"\n  This audio does not contain detectable speech.")
+        print(f"   Please upload audio with clear human speech.")
+    else:
+        correct = "F" if overall == "Fake" else "T"
+        print(f"\n{correct} Overall: {overall}")
+        print(f"   Probability (Fake): {prob:.4f}")
+        print(f"   Confidence: {conf:.4f}")
     
     # Duration config
     if 'duration_config' in result and result['duration_config']:
         dc = result['duration_config']
-        print(f"\n⏱️  Duration: {dc.get('duration', 'N/A'):.1f}s")
+        print(f"\n   Duration: {dc.get('duration', 'N/A'):.1f}s")
         print(f"   Category: {dc.get('category', 'N/A')}")
-        print(f"   Threshold: {dc.get('threshold', 'N/A'):.4f}")
-        print(f"   Diarization: {dc.get('use_diarization', 'N/A')}")
+        if overall != "No Speech":
+            print(f"   Threshold: {dc.get('threshold', 'N/A'):.4f}")
+            print(f"   Diarization: {dc.get('use_diarization', 'N/A')}")
     
     # Segment details
-    details = result.get('details', [])
-    if details and len(details) > 1:
-        print(f"\n🔍 Segments Analyzed: {len(details)}")
-        for i, detail in enumerate(details[:5], 1):  # Show first 5
-            speaker = detail.get('speaker', 'N/A')
-            time = detail.get('time', 'N/A')
-            seg_result = detail.get('result', 'N/A')
-            seg_prob = detail.get('prob_fake', 0.0)
-            print(f"   {i}. {speaker} [{time}]: {seg_result} (p={seg_prob:.4f})")
-        
-        if len(details) > 5:
-            print(f"   ... and {len(details) - 5} more segments")
+    if overall != "No Speech":
+        details = result.get('details', [])
+        if details and len(details) > 1:
+            print(f"\n🔍 Segments Analyzed: {len(details)}")
+            for i, detail in enumerate(details[:5], 1):  # Show first 5
+                speaker = detail.get('speaker', 'N/A')
+                time = detail.get('time', 'N/A')
+                seg_result = detail.get('result', 'N/A')
+                seg_prob = detail.get('prob_fake', 0.0)
+                print(f"   {i}. {speaker} [{time}]: {seg_result} (p={seg_prob:.4f})")
+            
+            if len(details) > 5:
+                print(f"   ... and {len(details) - 5} more segments")
     
     print("\n" + "="*60)
 
 def test_batch(audio_files: list[str]):
     """Test batch prediction."""
     
-    print(f"\n📤 Uploading {len(audio_files)} files for batch prediction...")
+    print(f"\n  Uploading {len(audio_files)} files for batch prediction...")
     
     files = []
     for path in audio_files:
         if not Path(path).exists():
-            print(f"⚠️  Skipping {path}: File not found")
+            print(f"   Skipping {path}: File not found")
             continue
         files.append(
             ('files', (Path(path).name, open(path, 'rb'), 'audio/wav'))
         )
     
     if not files:
-        print("❌ No valid files to upload")
+        print("   No valid files to upload")
         return
     
     try:
@@ -129,18 +138,27 @@ def test_batch(audio_files: list[str]):
         
         if response.status_code == 200:
             result = response.json()
-            print(f"\n✅ Processed {result['successful']}/{result['total_files']} files")
+            print(f"\n✅ Batch Results:")
+            print(f"   Total: {result['total_files']}")
+            print(f"   Successful: {result['successful']}")
+            print(f"   Failed: {result.get('failed', 0)}")
             
             for item in result['results']:
+                print(f"\n{'='*60}")
                 if item.get('status') == 'success':
-                    print(f"\n{item['filename']}: {item['overall']} (p={item['mean_probability']:.4f})")
+                    overall = item.get('overall', 'Unknown')
+                    if overall == "No Speech":
+                        print(f"   {item['filename']}: No Speech")
+                        print(f"   {item.get('message', 'No speech detected')}")
+                    else:
+                        print(f"  {item['filename']}: {overall} (p={item['mean_probability']:.4f})")
                 else:
-                    print(f"\n{item['filename']}: Error - {item.get('error', 'Unknown')}")
+                    print(f"  {item['filename']}: Error - {item.get('error', 'Unknown')}")
         else:
-            print(f"❌ Error {response.status_code}: {response.text}")
+            print(f"  Error {response.status_code}: {response.text}")
             
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"  Error: {e}")
     finally:
         # Close all file handles
         for _, (_, f, _) in files:
@@ -153,14 +171,14 @@ def get_model_info():
         if response.status_code == 200:
             info = response.json()
             print("\n" + "="*60)
-            print("📋 MODEL INFORMATION")
+            print("  MODEL INFORMATION")
             print("="*60)
             print(json.dumps(info, indent=2))
             print("="*60)
         else:
-            print(f"❌ Error: {response.status_code}")
+            print(f"  Error: {response.status_code}")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"  Error: {e}")
 
 def main():
     global API_URL

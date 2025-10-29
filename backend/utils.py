@@ -73,10 +73,5 @@ def load_audio(file_path: str) -> tuple:
 
     # Check duration
     duration = waveform.shape[1] / 16000
-    if duration < 1.0:
-        # Pad with zeros to reach minimum duration
-        target_samples = 16000
-        padding = target_samples - waveform.shape[1]
-        waveform = torch.nn.functional.pad(waveform, (0, padding))
 
     return waveform, duration

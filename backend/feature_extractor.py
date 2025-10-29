@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 from pyannote.audio import Model, Pipeline
 import pandas as pd
-from .utils import (
+from utils import (
     register_hooks, load_audio, apply_tkan, DATA_DIR,
     DATASET, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE,
     LAYER_NAMES, DEVICE, TOP_K
@@ -42,7 +42,8 @@ for idx, row in tqdm(metadata_df.iterrows(), total=metadata_df.shape[0]):
     # Map label: spoof=1 (fake), bona_fide=0 (real)
     label = 1 if label_str == "spoof" else 0
     
-    waveform = load_audio(audio_path).to(DEVICE)
+    waveform, _ = load_audio(audio_path)
+    waveform = waveform.to(DEVICE)
     activations_dict.clear()  # Reset for each sample
     with torch.no_grad():
         _ = model(waveform)  # Forward pass to trigger hooks
