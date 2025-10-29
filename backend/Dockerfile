@@ -32,9 +32,7 @@ ARG HUGGING_FACE_TOKEN
 ENV HUGGING_FACE_TOKEN=${HUGGING_FACE_TOKEN}
 
 RUN set -eux && \
-    . /opt/conda/etc/profile.d/conda.sh && \
-    conda activate cs5647project && \
-    python /app/scripts/entry.py
+    mamba run -n cs5647project python /app/scripts/entry.py
 
 # Default entry
 CMD ["mamba", "run", "-n", "cs5647project", \
