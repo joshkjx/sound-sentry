@@ -2,10 +2,10 @@
 Test client for the Audio Deepfake Detection API.
 
 Usage:
-    python test_api.py <audio_file.wav>
-    python test_api.py <audio_file.wav> --threshold 0.3
-    python test_api.py <audio_file.wav> --api http://192.168.1.100:8000
-    python test_api.py --batch file1.wav file2.wav --api http://localhost:5000
+    python test_app.py <audio_file.wav>
+    python test_app.py <audio_file.wav> --threshold 0.3
+    python test_app.py <audio_file.wav> --api http://192.168.1.100:8000
+    python test_app.py --batch file1.wav file2.wav --api http://localhost:5000
 """
 
 import requests
