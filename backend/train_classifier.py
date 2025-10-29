@@ -27,7 +27,7 @@ VERBOSE = False
 
 
 class BinaryClassifier(nn.Module):
-    def __init__(self, input_dim: int, hidden_size: int = 256, dropout_rate: float = 0.3):
+    def __init__(self, input_dim: int, hidden_size: int = 256, dropout_rate: float = 0.5):
         super().__init__()
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_size),

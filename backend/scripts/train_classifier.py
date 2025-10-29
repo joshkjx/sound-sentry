@@ -11,7 +11,7 @@ import os
 from sklearn.metrics import roc_curve
 from imblearn.over_sampling import SMOTE
 from .utils import (
-    DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE, 
+    DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE,
     SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE
 )
 # Prevent terminal clearing on Windows
@@ -24,29 +24,45 @@ VERBOSE = False
 # Differences from original DeepSonar:
 # - Added dropout (0.3) to each hidden layer for regularisation (paper had no dropout).
 # - Uses fixed hidden size (256) x4 instead of decreasing (512-256-128-64).
+
+
 class BinaryClassifier(nn.Module):
-    def __init__(self, input_dim: int, hidden_size: int = 256):
+    def __init__(self, input_dim: int, hidden_size: int = 256, dropout_rate: float = 0.5):
         super().__init__()
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_size),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_size, 1)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.network(x).squeeze(1)
 
+
 if __name__ == "__main__":
+
+    # Best hyperparameter set obtained from gridsearch
+    BEST_LR = 0.0005
+    BEST_WEIGHT_DECAY = 1e-5
+    BEST_HIDDEN_SIZE = 512
+    BEST_DROPOUT_RATE = 0.5
+
+    print("--- Using Hyperparameters ---")
+    print(f"Learning Rate: {BEST_LR}")
+    print(f"Weight Decay: {BEST_WEIGHT_DECAY}")
+    print(f"Hidden Size: {BEST_HIDDEN_SIZE}")
+    print(f"Dropout Rate: {BEST_DROPOUT_RATE}")
+    print("-----------------------------")
     # Load data
     features_path = os.path.join(DATA_DIR, FEATURES_OUTPUT_FILE)
     labels_path = os.path.join(DATA_DIR, LABELS_OUTPUT_FILE)
@@ -63,12 +79,12 @@ if __name__ == "__main__":
     features_val, features_test, labels_val, labels_test = train_test_split(
         features_temp, labels_temp, test_size=0.5, stratify=labels_temp,
         random_state=4347)
-    
+
     if VERBOSE:
         print(f"\nTrain set: {features_train.shape[0]} samples")
         print(f"Val set: {features_val.shape[0]} samples")
         print(f"Test set: {features_test.shape[0]} samples")
-    
+
         print(f"Train features before scaling:")
         print(f"  Mean: {features_train.mean():.2f}")
         print(f"  Std: {features_train.std():.2f}")
@@ -89,10 +105,12 @@ if __name__ == "__main__":
     num_low_var = low_var_mask.sum()
 
     if num_low_var > 0:
-        print(f"\nWARNING: {num_low_var} features have very low variance (std < {low_var_threshold})")
+        print(
+            f"\nWARNING: {num_low_var} features have very low variance (std < {low_var_threshold})")
         print(f"   These features are nearly constant and will be handled specially.")
-        print(f"   Low-variance feature indices: {np.where(low_var_mask)[0][:10]}...")
-    
+        print(
+            f"   Low-variance feature indices: {np.where(low_var_mask)[0][:10]}...")
+
     # Fit scaler with explicit parameters
     # Scale features (fits on train only)
     # Differences from original DeepSonar:
@@ -107,7 +125,8 @@ if __name__ == "__main__":
             original_scale = feature_scaler.scale_.copy()
             feature_scaler.scale_[low_var_mask] = 1.0
             print(f"   Before fix - min scale: {original_scale.min():.6f}")
-            print(f"   After fix - min scale: {feature_scaler.scale_.min():.6f}")
+            print(
+                f"   After fix - min scale: {feature_scaler.scale_.min():.6f}")
         else:
             print("   Error: Scaler not fitted properly")
 
@@ -158,16 +177,19 @@ if __name__ == "__main__":
     # 1. Noise augmentation (keeps full length)
     print("  Adding noise augmentation...")
     for noise_level, sigma in [('light', 0.005), ('medium', 0.01), ('heavy', 0.02)]:
-        noise = features_train_scaled + np.random.randn(*features_train_scaled.shape) * sigma
+        noise = features_train_scaled + \
+            np.random.randn(*features_train_scaled.shape) * sigma
         augmented_features_list.append(noise)
         augmented_labels_list.append(labels_train)
-        print(f"    - {noise_level} noise (σ={sigma}): {noise.shape[0]} samples")
+        print(
+            f"    - {noise_level} noise (σ={sigma}): {noise.shape[0]} samples")
 
     # Combine all
     features_train_augmented = np.vstack(augmented_features_list)
     labels_train_augmented = np.hstack(augmented_labels_list)
 
-    print(f"After noise augmentation: {features_train_augmented.shape[0]} samples")
+    print(
+        f"After noise augmentation: {features_train_augmented.shape[0]} samples")
     print(f"  Original: {features_train_scaled.shape[0]}")
     print(f"  Light noise: {features_train_scaled.shape[0]}")
     print(f"  Medium noise: {features_train_scaled.shape[0]}")
@@ -175,9 +197,10 @@ if __name__ == "__main__":
 
     # Classification with imbalanced classes by performing over-sampling.
     # Differences from original DeepSonar:
-    # - Apply SMOTE to train data for imbalance 
+    # - Apply SMOTE to train data for imbalance
     smote = SMOTE(random_state=4347)
-    resample_result = smote.fit_resample(features_train_augmented, labels_train_augmented)
+    resample_result = smote.fit_resample(
+        features_train_augmented, labels_train_augmented)
     features_train_res, labels_train_res = resample_result[0], resample_result[1]
 
     if VERBOSE:
@@ -186,13 +209,14 @@ if __name__ == "__main__":
         print(pd.Series(np.array(labels_train_res)).value_counts())
 
     # Convert to tensors
-    features_train_tensor = torch.tensor(features_train_res, dtype=torch.float32)
+    features_train_tensor = torch.tensor(
+        features_train_res, dtype=torch.float32)
     labels_train_tensor = torch.tensor(labels_train_res, dtype=torch.float32)
     features_val_tensor = torch.tensor(features_val, dtype=torch.float32)
     labels_val_tensor = torch.tensor(labels_val, dtype=torch.float32)
     features_test_tensor = torch.tensor(features_test, dtype=torch.float32)
     labels_test_tensor = torch.tensor(labels_test, dtype=torch.float32)
-    
+
     # Setup model, loss, optimiser
     # Differences from original DeepSonar:
     # - Adam instead of SGD, added weight_decay.
@@ -204,7 +228,7 @@ if __name__ == "__main__":
         betas=(0.9, 0.999),  # beta1 matches the SGD momentum
         weight_decay=1e-4    # more regularization than L2
     )
-    
+
     best_val_loss = float('inf')
     patience = 100  # Stop if no improvement for 100 epochs
     counter = 0
@@ -218,17 +242,18 @@ if __name__ == "__main__":
         # Added clipping.
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
-        
+
         model.eval()
         with torch.no_grad():
             val_output = model(features_val_tensor.to(DEVICE))
             val_prob = torch.sigmoid(val_output).cpu().numpy()
             val_pred = (val_prob > 0.5).astype(int)
-            val_loss = criterion(val_output, labels_val_tensor.to(DEVICE)).item()
+            val_loss = criterion(
+                val_output, labels_val_tensor.to(DEVICE)).item()
             val_acc = accuracy_score(labels_val, val_pred)
             val_auc = roc_auc_score(labels_val, val_prob)
             val_f1 = f1_score(labels_val, val_pred)
-        
+
         if (epoch + 1) % 100 == 0:
             print(f"Epoch {epoch+1}: train_loss={loss.item():.6f}, "
                   f"val_loss={val_loss:.4f}, val_acc={val_acc:.3f}, "
@@ -276,5 +301,11 @@ if __name__ == "__main__":
         'test_auc': float(test_auc),
         'test_f1': float(test_f1),
         'input_dim': int(features.shape[1]),
+        'hyperparameters': {
+            'lr': BEST_LR,
+            'weight_decay': BEST_WEIGHT_DECAY,
+            'hidden_size': BEST_HIDDEN_SIZE,
+            'dropout_rate': BEST_DROPOUT_RATE
+        }
     }, model_path)
     print(f"Model and metadata saved to {model_path}.")
