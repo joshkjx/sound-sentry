@@ -19,6 +19,7 @@ from datetime import datetime
 from scripts.predict_audio import AudioClassifier
 import logging
 import argparse
+from pydub import AudioSegment
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -91,25 +92,24 @@ async def predict_audio(
     
     Args:
         file: Audio file (WAV, MP3, etc.)
-        threshold: Optional custom threshold (default uses model's EER threshold)
-        use_diarization: Optional flag to enable/disable speaker diarization
         
     Returns:
         JSON with prediction results including:
-        - overall: "Real" or "Fake"
+        - overall: "Real", "Fake" or "No Speech"
         - mean_probability: Average probability of being fake
         - confidence: Confidence score
+        - message: Explanation if "No Speech"
         - details: Per-segment details if diarization is used
         - duration_config: Duration-based configuration used
     """
     if classifier is None:
         raise HTTPException(status_code=503, detail="Classifier not loaded")
     
-    # Validate file type
-    allowed_extensions = {'.wav', '.mp3', '.flac', '.ogg', '.m4a'}
-    filename = file.filename if file.filename is not None else ""
-    file_ext = os.path.splitext(filename)[1].lower()
+    # Get file extension
+    file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else '.webm'
     
+    # Validate file type (accept many formats)
+    allowed_extensions = {'.wav', '.mp3', '.flac', '.ogg', '.m4a', '.webm', '.opus', '.aac'}
     if file_ext not in allowed_extensions:
         raise HTTPException(
             status_code=400,
@@ -117,41 +117,80 @@ async def predict_audio(
         )
     
     # Create temporary file
-    temp_file = None
+    temp_input = None
+    temp_wav = None
     try:
         # Save uploaded file to temporary location
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
-            temp_file = tmp.name
+            temp_input = tmp.name
             shutil.copyfileobj(file.file, tmp)
         
-        logger.info(f"Processing file: {file.filename}")
+        # Convert to WAV if needed (model expects WAV)
+        if file_ext != '.wav':
+            logger.info(f"Converting {file_ext} to WAV...")
+            temp_wav = tempfile.mktemp(suffix='.wav')
+            
+            try:
+                # Load audio with pydub (supports many formats)
+                audio = AudioSegment.from_file(temp_input)
+                
+                # Convert to model's expected format
+                audio = audio.set_frame_rate(16000)  # Model expects 16kHz
+                audio = audio.set_channels(1)        # Mono
+                audio = audio.set_sample_width(2)    # 16-bit
+                
+                # Export as WAV
+                audio.export(temp_wav, format='wav')
+                audio_path = temp_wav
+                
+                logger.info(f"Conversion successful")
+                
+            except Exception as e:
+                logger.error(f"Audio conversion failed: {e}")
+                raise HTTPException(status_code=400, detail=f"Audio conversion failed: {str(e)}")
+        else:
+            audio_path = temp_input
+        
+        logger.info(f"Processing file: {file.filename or 'uploaded_audio'}")
         
         # Run prediction
-        results = classifier.predict(temp_file)
+        results = classifier.predict(audio_path)
         
         # Add metadata
-        results["filename"] = file.filename
+        results["filename"] = file.filename or "audio_blob"
         results["timestamp"] = datetime.now().isoformat()
+        results["original_format"] = file_ext
         
-        # Remove ground_truth and correct fields if present (not relevant for API)
+        # Remove ground_truth field if present (not relevant for API)
         results.pop("ground_truth", None)
-        results.pop("correct", None)
         
-        logger.info(f"Prediction complete: {results['overall']} (p={results['mean_probability']:.4f})")
+        # Log result
+        if results['overall'] == "No Speech":
+            logger.info(f"No speech detected in {file.filename}")
+        else:
+            logger.info(f"Prediction complete: {results['overall']} (p={results['mean_probability']:.4f})")
         
         return JSONResponse(content=results)
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing file: {e}")
         raise HTTPException(status_code=500, detail=str(e))
         
     finally:
-        # Clean up temporary file
-        if temp_file and os.path.exists(temp_file):
+        # Clean up temporary files
+        if temp_input and os.path.exists(temp_input):
             try:
-                os.remove(temp_file)
+                os.remove(temp_input)
             except Exception as e:
-                logger.warning(f"Failed to remove temp file: {e}")
+                logger.warning(f"Failed to remove temp input file: {e}")
+        
+        if temp_wav and os.path.exists(temp_wav):
+            try:
+                os.remove(temp_wav)
+            except Exception as e:
+                logger.warning(f"Failed to remove temp wav file: {e}")
 
 @app.post("/batch-predict")
 async def batch_predict(
@@ -162,11 +201,10 @@ async def batch_predict(
     
     Args:
         files: List of audio files
-        threshold: Optional custom threshold
-        use_diarization: Optional flag for diarization
         
     Returns:
-        JSON array with prediction results for each file
+        JSON array with prediction results for each file.
+        Files with no speech will have status="no_speech"
     """
     if classifier is None:
         raise HTTPException(status_code=503, detail="Classifier not loaded")
@@ -205,7 +243,6 @@ async def batch_predict(
             prediction["filename"] = file.filename
             prediction["status"] = "success"
             prediction.pop("ground_truth", None)
-            prediction.pop("correct", None)
             
             results.append(prediction)
             
@@ -223,11 +260,16 @@ async def batch_predict(
                     os.remove(temp_file)
                 except:
                     pass
+
+    # Count statuses
+    successful = sum(1 for r in results if r.get("status") == "success")
+    failed = sum(1 for r in results if r.get("status") == "failed")
     
     return JSONResponse(content={
         "timestamp": datetime.now().isoformat(),
         "total_files": len(files),
-        "successful": sum(1 for r in results if r.get("status") == "success"),
+        "successful": successful,
+        "failed": failed,
         "results": results
     })
 
@@ -247,7 +289,22 @@ async def model_info():
             "short": "3-6s (threshold multiplier: 0.80)",
             "normal": "> 6s (threshold multiplier: 1.00)"
         },
-        "diarization": "Enabled for audio > 6s"
+        "diarization": "Enabled for audio > 6s",
+        "possible_results": {
+            "Real": "Audio appears genuine",
+            "Fake": "Audio appears AI-generated/deepfake",
+            "No Speech": "No speech detected (silent/noise/music)"
+        },
+        "silence_detection": {
+            "enabled": True,
+            "threshold": 0.01,
+            "description": "Returns 'No Speech' for silent audio or audio without detectable speech"
+        },
+        "supported_formats": {
+            "input": [".wav", ".mp3", ".webm", ".ogg", ".m4a", ".flac", ".opus", ".aac"],
+            "auto_conversion": True,
+            "output_format": "16kHz, 16-bit, mono WAV (automatic)"
+        }
     }
 
 if __name__ == "__main__":

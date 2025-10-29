@@ -1,13 +1,13 @@
 import torch
 import torchaudio
 import numpy as np
-from pyannote.audio import Model, Pipeline
-from .train_classifier import BinaryClassifier
+from pyannote.audio import Model, Pipeline, Inference
+from train_classifier import BinaryClassifier
 import joblib
 import os
 from pydub import AudioSegment
 import pandas as pd
-from .utils import ( 
+from utils import ( 
     register_hooks, load_audio, apply_tkan,
     DATA_DIR, MODEL_DIR, DATASET, SCALER_OUTPUT_FILE,
     MODEL_OUTPUT_FILE, LAYER_NAMES, DEVICE, TOP_K
@@ -18,6 +18,11 @@ from omegaconf.listconfig import ListConfig
 from omegaconf.base import ContainerMetadata
 from typing import Optional
 import warnings
+import logging
+import hashlib
+
+# Set logging level for lightning to ERROR to reduce verbosity
+logging.getLogger("lightning.pytorch.utilities.migration").setLevel(logging.ERROR)
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning, module=r"lightning\.pytorch\..*")
@@ -106,8 +111,25 @@ class AudioClassifier:
         
         if self.diar_pipeline is None:
             raise RuntimeError("Failed to load diarization model from local or online source")
-        self.diar_pipeline = self.diar_pipeline.to(torch.device(DEVICE))
+        self.diar_pipeline = self.diar_pipeline.to(torch.device("cpu"))
 
+        # Load segmentation model for VAD
+        local_seg_path = os.path.join(MODEL_DIR, "pyannote-segmentation-3", "pytorch_model.bin")
+        if os.path.exists(local_seg_path):
+            if VERBOSE:
+                print(f"Loading local model from: {local_seg_path}")
+            self.vad_model = Model.from_pretrained(local_seg_path, strict=False)
+        else:
+            if VERBOSE:
+                print("Local model not found, loading from pyannote/segmentation-3.0")
+            self.vad_model = Model.from_pretrained("pyannote/segmentation-3.0", strict=False)
+
+        if self.vad_model is None:
+            raise RuntimeError("Failed to load segmentation model from local or online source")
+        self.vad_model = self.vad_model.to("cpu")
+        self.vad_infer = Inference(self.vad_model, window="whole", device=torch.device("cpu"))
+        self.vad_model.eval()
+        
         # Load feature scaler
         scaler_path = os.path.join(DATA_DIR, SCALER_OUTPUT_FILE)
         self.feature_scaler = joblib.load(scaler_path)
@@ -216,40 +238,37 @@ class AudioClassifier:
 
     # Predict using speaker diarization.
     # Modifies results dict in place.
-    def predict_with_diarization(self, audio_path: str, threshold: float, results: dict):
-        if self.diar_pipeline is None:
-            raise RuntimeError("Diarization pipeline is not initialized")
-        diarization = self.diar_pipeline(audio_path)
-        audio = AudioSegment.from_file(audio_path)
-        
-        segment_count = 0
-        segment_probs = []
-        segment_confidences = []
-
-        for turn, speaker in diarization.exclusive_speaker_diarization:
-            start_ms = int(turn.start * 1000)
-            end_ms = int(turn.end * 1000)
-
-            # Skip very short segments
-            if (end_ms - start_ms) < 1000:
-                continue
+    def predict_with_diarization(self, audio_path: str, waveform: torch.Tensor,
+                                 duration: float, threshold: float, results: dict):
+        try:
+            if self.diar_pipeline is None:
+                raise RuntimeError("Diarization pipeline is not initialized")
+            diarization  = self.diar_pipeline(audio_path)
             
-            segment_count += 1
-            segment = audio[start_ms:end_ms]
-            temp_file = f"temp_segment_{speaker}_{start_ms}.wav"
-            
-            try:
-                segment.export(temp_file, format="wav")
+            segment_count = 0
+            segment_probs = []
+            segment_confidences = []
+
+            for turn, speaker in diarization.exclusive_speaker_diarization:
+                start = int(turn.start * 16000)
+                end = int(turn.end * 16000)
+
+                # Skip very short segments
+                if (end - start) < 16000:
+                    continue
                 
+                segment_waveform = waveform[:, start:end].to(DEVICE)
+
                 if VERBOSE:
-                    print(f"Processing Segment {segment_count}: {speaker} [{turn.start:.1f}-{turn.end:.1f}s]")
-                
-                waveform, duration = load_audio(temp_file)
-                waveform = waveform.to(DEVICE)
-                pred_info = self.predict_and_format(waveform, threshold)
-                
+                    print(f"Processing Segment {segment_count+1}: "
+                        f"{speaker} [{turn.start:.1f}-{turn.end:.1f}s]")
+                    
+                pred_info = self.predict_and_format(segment_waveform, threshold)
+
                 if VERBOSE:
-                    print(f"-> Result: {pred_info['result']} (p={pred_info['prob_fake']:.4f}, conf={pred_info['confidence']:.4f})")
+                    print(f"-> Result: {pred_info['result']} "
+                        f"(p={pred_info['prob_fake']:.4f}, "
+                        f"conf={pred_info['confidence']:.4f})")
 
                 results["details"].append({
                     "speaker": speaker,
@@ -261,22 +280,61 @@ class AudioClassifier:
 
                 if pred_info['result'] == "Fake":
                     results["overall"] = "Fake"
+                    
+                segment_count += 1
 
-            except Exception as e:
-                print(f"Error processing segment {speaker}: {e}")
-                segment_count -= 1
-            finally:
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
+            # Calculate overall statistics
+            if segment_probs:
+                results["mean_probability"] = float(np.mean(segment_probs))
+                results["max_probability"] = float(np.max(segment_probs))
+                results["min_probability"] = float(np.min(segment_probs))
+                results["confidence"] = float(np.mean(segment_confidences))
 
-        # Calculate overall statistics
-        results["mean_probability"] = np.mean(segment_probs)
-        results["max_probability"] = np.max(segment_probs)
-        results["min_probability"] = np.min(segment_probs)
-        results["confidence"] = np.mean(segment_confidences)
+            if VERBOSE:
+                print(f"Processed {segment_count} segments "
+                    f"(audio length {duration:.1f}s)")
+            
+            torch.cuda.empty_cache()
+        except Exception as e:
+            print(f"Diarization failed: {e}")
+            results["message"] = f"Diarization error: {e}"
 
-        if VERBOSE:
-            print(f"Processed {segment_count} segments")
+    # Uses pyannote segmentation-3.0 model to detect presence of speech.
+    # Returns True if at least one segment exceeds 0.5 confidence for speech.
+    def has_speech(self, waveform: torch.Tensor) -> bool:
+        try:
+            # Move to CPU for pyannote segmentation model
+            wf = waveform.detach().to("cpu")
+
+            # Run inference — MUST be a dict with a torch Tensor, not numpy
+            scores = self.vad_infer({"waveform": wf, "sample_rate": 16000})
+
+            # Extract posterior matrix (SlidingWindowFeature -> np array)
+            scores_obj = scores[0] if isinstance(scores, tuple) else scores
+            post = np.asarray(scores_obj.data) if hasattr(scores_obj, "data") else np.asarray(scores_obj)
+
+            # Speech class = column 1 for segmentation-3.0
+            if post.ndim == 2 and post.shape[1] >= 2:
+                speech_prob = post[:, 1]
+            else:
+                # fallback: single-prob track
+                speech_prob = post.reshape(-1)
+
+            # Threshold and compute speech ratio
+            speech_ratio = float(np.mean(speech_prob > 0.5))
+
+            if VERBOSE:
+                print(f"Speech ratio (model-based): {speech_ratio:.3f}")
+
+            return bool(speech_ratio > 0.05)  # at least 5% of frames are speech
+
+        except Exception as e:
+            print(f"VAD model failed: {e}")
+            return False
+        finally:
+            # Restore waveform to its original device if needed
+            if waveform.device.type != DEVICE:
+                waveform = waveform.to(DEVICE)
 
     # Predicts on the supplied audio (inference).
     # If diarization enabled, segments speakers and predicts per segment.
@@ -288,34 +346,64 @@ class AudioClassifier:
     def predict(self, audio_path: str) -> dict:
         results = {
             "overall": "Real",
+            "message": "",
             "mean_probability": 0.0,
             "max_probability": 0.0,
             "min_probability": 0.0,
             "confidence": 0.0,
-            "details": []
+            "ground_truth": None,
+            "correct": None,
+            "details": [],
+            "duration_config": []
         }
 
         # Load the audio wav file
         waveform, duration = load_audio(audio_path)
         waveform = waveform.to(DEVICE)
+
+        # Check for silence (very low energy)
+        audio_energy = torch.abs(waveform).mean().item()
+        # Return "No Speech" if audio is silent
+        if audio_energy < 0.01:
+            results["overall"] = "No Speech"
+            results["message"] = "Audio is silent or contains no detectable speech"
+            if VERBOSE:
+                print("  No speech: audio energy too low")
+            return results
+        
+        if duration < 1.0:
+            results["overall"] = "No Speech"
+            results["message"] = "Audio too short (<1s)"
+            if VERBOSE:
+                print("  No speech: audio is too short (<1s)")
+            return results
+        
+        if not self.has_speech(waveform):
+            results["overall"] = "No Speech"
+            results["message"] = "No human speech detected"
+            if VERBOSE:
+                print("  No speech: pyannote found no speaker")
+            return results
         
         # Get duration-aware configuration
         duration_config = self.get_duration_config(duration, self.default_threshold)
         threshold = duration_config['threshold']
         use_diarization = duration_config['use_diarization']
-        results["duration_config"] = {
+        results["duration_config"].append({
             'duration': duration_config['duration'],
             'category': duration_config['category'],
             'base_threshold': duration_config['base_threshold'],
             'multiplier': duration_config['multiplier'],
             'threshold': threshold,
             'use_diarization': use_diarization
-        }
+        })
 
         # Choose prediction strategy based on diarization
         if use_diarization:
             try:
-                self.predict_with_diarization(audio_path, threshold, results)
+                if self.diar_pipeline is None:
+                    raise RuntimeError("Diarization pipeline is not initialized")
+                self.predict_with_diarization(audio_path, waveform, duration, threshold, results)
             except Exception as e:
                 print(f"Diarization failed: {e}")
                 print("Falling back to single file prediction...")

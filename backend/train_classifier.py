@@ -11,7 +11,7 @@ import os
 from sklearn.metrics import roc_curve
 from imblearn.over_sampling import SMOTE
 from utils import (
-    DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE,
+    DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE, 
     SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE
 )
 # Prevent terminal clearing on Windows

@@ -348,18 +348,74 @@
                     body: formData
                 });
 
-                if (!response.ok) {
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Check if result is "No Speech"
+                    if (result.overall === "No Speech") {
+                        displayNoSpeech(result);
+                    } else {
+                        displayResult(result);
+                    }
+                } else {
                     const error = await response.json();
                     throw new Error(error.detail || 'Prediction failed');
                 }
-
-                const result = await response.json();
-                displayResult(result);
             } catch (error) {
                 showError(error.message);
             } finally {
                 hideLoading();
             }
+        }
+
+        function displayNoSpeech(result) {
+            const resultDiv = document.getElementById('result');
+            
+            resultDiv.className = 'result';
+            resultDiv.style.background = '#fff3cd';
+            resultDiv.style.borderColor = '#ffc107';
+            
+            document.getElementById('resultIcon').textContent = '⚠️';
+            document.getElementById('resultTitle').textContent = 'No Speech Detected';
+            document.getElementById('resultTitle').style.color = '#856404';
+            
+            // Update detail fields (don't destroy them)
+            document.getElementById('probability').textContent = 'N/A';
+            document.getElementById('confidence').textContent = 'N/A';
+            
+            // Safely get duration
+            const duration = result.duration_config?.duration;
+            document.getElementById('duration').textContent = 
+                duration ? `${duration.toFixed(1)}s` : 'N/A';
+            document.getElementById('category').textContent = 'No Speech';
+            
+            // Hide progress bar
+            document.getElementById('progressFill').style.width = '0%';
+            
+            // Add message after the existing details
+            const resultDiv_details = resultDiv.querySelector('.result-details');
+            
+            // Remove any existing message div
+            const existingMessage = resultDiv_details.querySelector('.no-speech-message');
+            if (existingMessage) {
+                existingMessage.remove();
+            }
+            
+            // Add new message div
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'no-speech-message';
+            messageDiv.style.cssText = 'margin: 15px 0; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #ffc107;';
+            
+            const message = result.message || 'No speech detected in audio';
+            messageDiv.innerHTML = `
+                <strong>Message:</strong> ${message}<br><br>
+                <strong>What to do:</strong> Please upload audio containing clear human speech.
+                This tool is designed to analyze spoken audio only.
+            `;
+            
+            resultDiv_details.appendChild(messageDiv);
+            
+            resultDiv.style.display = 'block';
         }
 
         function displayResult(data) {
@@ -376,14 +432,25 @@
             document.getElementById('probability').textContent = `${probability}%`;
             document.getElementById('confidence').textContent = `${confidence}%`;
 
-            if (data.duration_config) {
+            // Safely access duration_config
+            if (data.duration_config && data.duration_config.duration !== undefined) {
                 document.getElementById('duration').textContent = 
                     `${data.duration_config.duration.toFixed(1)}s`;
                 document.getElementById('category').textContent = 
-                    data.duration_config.category;
+                    data.duration_config.category || 'N/A';
+            } else {
+                document.getElementById('duration').textContent = 'N/A';
+                document.getElementById('category').textContent = 'N/A';
             }
 
             document.getElementById('progressFill').style.width = `${probability}%`;
+
+            // Remove any existing message div
+            const resultDiv_details = resultDiv.querySelector('.result-details');
+            const existingMessage = resultDiv_details.querySelector('.no-speech-message');
+            if (existingMessage) {
+                existingMessage.remove();
+            }
 
             resultDiv.style.display = 'block';
         }
