@@ -85,7 +85,7 @@ async def health_check():
 
 @app.post("/predict")
 async def predict_audio(
-    file: UploadFile = File(...)
+    audio: UploadFile = File(...)
 ):
     """
     Predict if an audio file is real or AI-generated/deepfake.
@@ -104,6 +104,9 @@ async def predict_audio(
     """
     if classifier is None:
         raise HTTPException(status_code=503, detail="Classifier not loaded")
+
+    file=audio
+    logger.info(f"File Received: {file.size} bytes")
     
     # Get file extension
     file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else '.webm'
@@ -124,6 +127,7 @@ async def predict_audio(
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
             temp_input = tmp.name
             shutil.copyfileobj(file.file, tmp)
+            tmp.flush()
         
         # Convert to WAV if needed (model expects WAV)
         if file_ext != '.wav':
@@ -131,8 +135,13 @@ async def predict_audio(
             temp_wav = tempfile.mktemp(suffix='.wav')
             
             try:
+                # Check input file
+                logger.info(f"Input file exists: {os.path.exists(temp_input)}")
+                logger.info(f"Input file size: {os.path.getsize(temp_input)} bytes")
+                logger.info(f"Input file path: {temp_input}")
+
                 # Load audio with pydub (supports many formats)
-                audio = AudioSegment.from_file(temp_input)
+                audio = AudioSegment.from_file(temp_input, format="webm")
                 
                 # Convert to model's expected format
                 audio = audio.set_frame_rate(16000)  # Model expects 16kHz
