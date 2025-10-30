@@ -1,41 +1,46 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tab Audio Recorder</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 10px;
-      min-width: 200px;
-    }
-    button {
-      padding: 10px;
-      font-size: 16px;
-      cursor: pointer;
-      width: 100%;
-      border: none;
-      border-radius: 4px;
-      color: white;
-    }
-    #startRecording {
-      background-color: #4CAF50;
-    }
-    #stopRecording {
-      background-color: #f44336;
-      display: none; 
-    }
-    #status {
-      margin-top: 10px;
-      font-weight: bold;
-      text-align: center;
-      color: #333;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>AI Voice Detector</title>
+    <link rel="stylesheet" href="popup.css">
+    <script src="chart.umd.js"></script> 
 </head>
 <body>
-  <button id="startRecording">Start Recording</button>
-  <button id="stopRecording">Stop and Download</button>
-  <div id="status">Ready</div>
-  <script src="popup.js"></script>
+    <div class="container">
+        <header class="header-box">
+            <h1>AI Voice Detector</h1>
+        </header>
+        <div class="video-info-box">
+            <span class="listening-label">Currently Listening to:</span>
+            <h2 id="video-title" class="video-title-display">Video Title</h2> 
+        </div>
+        <!-- <h2 id="video-title" class="video-title-display">Video Title</h2> -->
+        <div class="stats-grid">
+            
+            <div class="stat-row">
+                <span class="label">Decision:</span>
+                <div id="decision-box" class="decision-pill">
+                    <span id="decision">N/A</span>
+                </div>
+            </div>
+
+            <div class="stat-row">
+                <span class="label">Confidence:</span>
+                <span id="confidence" class="confidence-value">0.00</span>
+            </div>
+            
+            <!-- <div style="display: none;">Chunks Processed: <span id="chunk-count">0</span></div> -->
+        </div>
+        <div class="chart-container">
+            <canvas id="confidence-chart" height="180"></canvas>
+        </div>
+        <div id="warning-box" class="warning-box hidden">
+            <img src="../images/alert-icon.png" alt="Warning Alert" class="warning-icon-image">
+            <p class="warning-text">Warning: High confidence of AI voice detected in the last few seconds.</p>
+        </div>
+    </div>
+
+    <script src="popup.js" type="module"></script>
 </body>
 </html>

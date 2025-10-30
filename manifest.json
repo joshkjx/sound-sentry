@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Fake AI voice detector",
   "version": "1.0",
-  "description": "Captures audio from the current tab and downloads it as an MP3 file.",
+  "description": "Captures audio from active YouTube tabs and sends it to external API",
   "icons": {
     "128": "./images/icon.png"
   },
@@ -10,14 +10,13 @@
     "default_popup": "./popup/popup.html",
     "default_icon": "./images/icon.png"
   },
-  "permissions": [
-    "tabCapture",
-    "activeTab",
-    "scripting",
-    "downloads",
-    "offscreen"
-  ],
+  "permissions": ["activeTab"],
+  "content_scripts": [{
+    "matches": ["*://*.youtube.com/*"],
+    "js": ["content.js"]
+  }],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "service-worker.js",
+    "type": "module"
   }
 }

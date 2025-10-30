@@ -1,0 +1,155 @@
+/* General Setup */
+body {
+    font-family: Arial, sans-serif;
+    width: 300px; /* Standard extension popup width */
+    margin: 0;
+    padding: 15px;
+    background-color: #f8f8f8;
+}
+
+.container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Vertical spacing between main blocks */
+    box-sizing: border-box;
+}
+
+/* Header Box */
+.header-box {
+    border: 2px solid #333;
+    border-radius: 10px;
+    padding: 5px 10px;
+    text-align: center;
+    background-color: #fff;
+}
+
+.header-box h1 {
+    font-size: 1.2em;
+    margin: 0;
+    padding: 0;
+    font-weight: bold;
+    color: #333;
+}
+
+ /* Video Title Info */
+.video-info-box {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 10px 5px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #f5f5f5; /* Light background for the container */
+    margin-bottom: 5px; /* Add some space below this box */
+}
+
+.listening-label {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #6c757d; 
+    margin-bottom: 3px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.video-title-display {
+    font-size: 1.1em;
+    font-weight: bold; 
+    text-align: center;
+    color: #333;
+    margin: 0; 
+    padding: 5px 0px 5px 0px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 5px 0;
+}
+
+/* Stats Section */
+.stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 5px 0;
+}
+
+.stat-row {
+    display: flex;
+    align-items: center;
+}
+
+.label {
+    font-weight: bold;
+    font-size: 14px;
+    color: #333;
+    padding-left: 10px;
+    width: 100px;
+    flex-shrink: 0;
+}
+
+/* Decision Pill */
+.decision-pill {
+    padding: 4px 12px;
+    border: 1px solid #333; /* Black border for the pill shape */
+    border-radius: 15px;
+    font-weight: bold;
+    text-align: center;
+    min-width: 50px;
+    background-color: #fff;
+}
+
+.decision-pill span {
+    font-size: 13px;
+    color: #333;
+}
+
+/* Confidence Value */
+.confidence-value {
+    font-size: 13px;
+    color: #007bff;
+    font-weight: 600;
+}
+
+/* Chart Container */
+.chart-container {
+    margin-top: 5px;
+}
+
+canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Warning Box Styling */
+.warning-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border: 2px solid #dc3545; /* Red border */
+    border-radius: 8px;
+    background-color: #f8d7da; /* Light red background */
+    color: #721c24; /* Dark red text */
+}
+
+.warning-icon-image {
+    width: 24px;   
+    height: 24px; 
+    flex-shrink: 0; 
+}
+
+.warning-text {
+    margin: 0;
+    font-size: 0.9em;
+    font-weight: bold;
+}
+
+.hidden {
+    display: none !important; /* Utility class to hide the box */
+}
