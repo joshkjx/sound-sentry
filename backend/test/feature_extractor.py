@@ -9,6 +9,7 @@ from utils import (
     DATASET, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE,
     LAYER_NAMES, DEVICE, TOP_K
 )
+from pathlib import Path
 
 # Load pyannote model
 # Differences from original DeepSonar:
@@ -24,6 +25,7 @@ hooks = register_hooks(model, LAYER_NAMES, activations_dict)
 all_features = []
 all_labels = []
 
+print("--- Part 1: Processing 'in-the-wild' dataset ---")
 # Load metadata
 metadata_path = os.path.join(DATA_DIR, DATASET, "meta.csv")
 metadata_df = pd.read_csv(metadata_path)
@@ -52,6 +54,58 @@ for idx, row in tqdm(metadata_df.iterrows(), total=metadata_df.shape[0]):
     all_features.append(tkan_features)
     all_labels.append(label)
     
+print(f"Found {len(all_features)} features from 'in-the-wild'.")
+
+print("\n--- Part 2: Processing 'fake or real' dataset ---")
+new_data_dir = Path("test_data")
+datasets_to_scan = ["training", "validation"]
+labels_to_scan = ["fake", "real"]
+
+new_features_count = 0
+
+for dataset in datasets_to_scan:
+    for label in labels_to_scan:
+        current_dir = new_data_dir / dataset / label
+        if not current_dir.is_dir():
+            print(f"Skipping: Directory not found: {current_dir}")
+            continue
+
+        # Find all audio files
+        audio_files = list(current_dir.glob("*.wav")) + \
+            list(current_dir.glob("*.mp3"))
+
+        if not audio_files:
+            continue
+
+        # Set the label (1 for fake/spoof, 0 for real)
+        label_val = 1 if label == "fake" else 0
+
+        for audio_path in tqdm(audio_files, desc=f"Processing {dataset}/{label}"):
+            try:
+                # Load audio (using the direct path)
+                # load_audio expects a string
+                waveform, _ = load_audio(str(audio_path))
+                waveform = waveform.to(DEVICE)
+
+                # Extract features (same logic as before)
+                activations_dict.clear()
+                with torch.no_grad():
+                    _ = model(waveform)
+
+                tkan_features = apply_tkan(
+                    activations_dict, LAYER_NAMES, TOP_K)
+
+                # Append to the *same* lists
+                all_features.append(tkan_features)
+                all_labels.append(label_val)
+                new_features_count += 1
+
+            except Exception as e:
+                print(f"  -> ERROR processing file {audio_path.name}: {e}")
+
+print(f"Found {new_features_count} features from 'test_data'.")
+
+print("\n--- Part 3: Combining and saving all features ---")
 # Stack and save
 all_features_array = np.stack(all_features)
 all_labels_array = np.array(all_labels)
