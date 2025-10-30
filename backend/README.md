@@ -46,3 +46,15 @@ from pyannote.audio.telemetry import set_telemetry_metrics
 # disable metrics globally
 set_telemetry_metrics(False, save_choice_as_default=True)
 ```
+
+### Create docker image
+```powershell
+docker build --no-cache `
+  --build-arg HUGGING_FACE_TOKEN=hf_... `
+  -t cs5647 .
+
+docker run --gpus all -p 8000:8000 --name cs5647proj --rm `
+  -v ${PWD}/api:/app/api `
+  -v ${PWD}/scripts:/app/scripts `
+  cs5647
+```

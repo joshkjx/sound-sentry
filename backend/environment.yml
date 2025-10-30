@@ -1,0 +1,12 @@
+name: cs5647project
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pycosat
+  - ffmpeg>=7,<8
+  - libiconv
+  - libopus
+  - lame
+  - x264
+  - x265

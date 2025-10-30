@@ -2,9 +2,9 @@
 FastAPI server for audio deepfake detection.
 
 Run with: 
-    python api.py
-    python api.py --host 0.0.0.0 --port 8000
-    python api.py --host 192.168.1.100 --port 5000
+    python app.py
+    python app.py --host 0.0.0.0 --port 8000
+    python app.py --host 192.168.1.100 --port 5000
 """
 import sys
 from pathlib import Path
