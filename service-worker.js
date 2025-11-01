@@ -169,7 +169,7 @@ class AudioProcessor {
     // API COMMUNICATION
     // ============================================
     async sendToASRService(blob) {
-        const API_ENDPOINT = 'http://localhost:8000/predict'; // Change this to actual API endpoint later
+        const API_ENDPOINT = 'http://ec2-13-214-197-34.ap-southeast-1.compute.amazonaws.com:8080/predict'; // Change this to actual API endpoint later
 
         this.currentRecordingSessionChunksProcessed++;
 
