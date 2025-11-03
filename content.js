@@ -276,7 +276,7 @@ class AudioCapture {
         });
 
         const chunks = [];
-        const CHUNK_DURATION_MS = 10000;
+        const CHUNK_DURATION_MS = 4000;
 
         this.mediaRecorder.ondataavailable = (event) => {
             chunks.push(event.data);
