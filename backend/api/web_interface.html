@@ -233,6 +233,18 @@
         <input type="file" id="fileInput" accept="audio/*">
         <div class="file-name" id="fileName"></div>
 
+        <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+            <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="diarizationToggle" style="display: block; width: 20px; height: 20px; margin-right: 10px; cursor: pointer;">
+                <div>
+                    <strong style="font-size: 16px;">Enable Speaker Diarization</strong>
+                    <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">
+                        Split audio into speaker segments for detailed analysis (works best for audio > 6 seconds)
+                    </p>
+                </div>
+            </label>
+        </div>
+
         <button id="analyzeBtn" onclick="analyzeAudio()" disabled>
             Analyze Audio
         </button>
@@ -340,7 +352,11 @@
             hideError();
 
             const formData = new FormData();
-            formData.append('file', selectedFile);
+            formData.append('audio', selectedFile);
+            
+            // Add diarization parameter
+            const useDiarization = document.getElementById('diarizationToggle').checked;
+            formData.append('use_diarization', useDiarization);
 
             try {
                 const response = await fetch(`${API_URL}/predict`, {
@@ -383,7 +399,7 @@
             document.getElementById('probability').textContent = 'N/A';
             document.getElementById('confidence').textContent = 'N/A';
             
-             // Safely get duration from duration_config array
+            // Safely get duration from duration_config array
             const durationConfig = result.duration_config?.[0] || result.duration_config;
             const duration = durationConfig?.duration;
             document.getElementById('duration').textContent = 
@@ -434,8 +450,9 @@
             document.getElementById('probability').textContent = `${probability}%`;
             document.getElementById('confidence').textContent = `${confidence}%`;
 
-             // Safely access duration_config (it's an array with one element)
+            // Safely access duration_config (it's an array with one element)
             const durationConfig = data.duration_config?.[0] || data.duration_config;
+            const enableDiarization = durationConfig.use_diarization;
             if (durationConfig && durationConfig.duration !== undefined) {
                 document.getElementById('duration').textContent = 
                     `${durationConfig.duration.toFixed(1)}s`;
@@ -453,6 +470,40 @@
             const existingMessage = resultDiv_details.querySelector('.no-speech-message');
             if (existingMessage) {
                 existingMessage.remove();
+            }
+            
+            // Remove any existing segments display
+            const existingSegments = resultDiv_details.querySelector('.segments-display');
+            if (existingSegments) {
+                existingSegments.remove();
+            }
+            
+            // Display speaker segments if diarization was used
+            if (enableDiarization && data.details && data.details.length > 0) {
+                const segmentsDiv = document.createElement('div');
+                segmentsDiv.className = 'segments-display';
+                segmentsDiv.style.cssText = 'margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;';
+                
+                let segmentsHTML = '<strong>🎙️ Speaker Segments:</strong><br><br>';
+                
+                data.details.forEach((segment, index) => {
+                    const segmentResult = segment.result || 'Unknown';
+                    const segmentProb = segment.probability ? (segment.probability * 100).toFixed(1) : 'N/A';
+                    const segmentColor = segmentResult === 'Fake' ? '#ff4444' : '#44ff44';
+                    
+                    segmentsHTML += `
+                        <div style="margin: 8px 0; padding: 10px; background: white; border-radius: 6px; border-left: 3px solid ${segmentColor};">
+                            <strong>Segment ${index + 1}:</strong> ${segment.speaker}<br>
+                            <span style="color: #666;">⏱️ ${segment.time}</span><br>
+                            <span style="color: ${segmentColor}; font-weight: bold;">
+                                ${segmentResult} (${segmentProb}%)
+                            </span>
+                        </div>
+                    `;
+                });
+                
+                segmentsDiv.innerHTML = segmentsHTML;
+                resultDiv_details.appendChild(segmentsDiv);
             }
 
             resultDiv.style.display = 'block';

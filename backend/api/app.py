@@ -9,7 +9,7 @@ Run with:
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -85,13 +85,16 @@ async def health_check():
 
 @app.post("/predict")
 async def predict_audio(
-    file: UploadFile = File(...)
+    audio: UploadFile = File(...),
+    use_diarization: bool = Form(False)  # Default: OFF
 ):
     """
     Predict if an audio file is real or AI-generated/deepfake.
     
     Args:
-        file: Audio file (WAV, MP3, etc.)
+        - audio: Audio file to analyze (WAV, MP3, FLAC, etc.)
+        - use_diarization: Enable speaker diarization for detailed segment analysis
+                       (works best for audio > 6 seconds)
         
     Returns:
         JSON with prediction results including:
@@ -101,10 +104,14 @@ async def predict_audio(
         - message: Explanation if "No Speech"
         - details: Per-segment details if diarization is used
         - duration_config: Duration-based configuration used
+        - If diarization enabled: includes per-segment details
     """
     if classifier is None:
         raise HTTPException(status_code=503, detail="Classifier not loaded")
-    
+
+    file=audio
+    logger.info(f"File Received: {file.size} bytes")
+
     # Get file extension
     file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else '.webm'
     
@@ -124,6 +131,7 @@ async def predict_audio(
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
             temp_input = tmp.name
             shutil.copyfileobj(file.file, tmp)
+            tmp.flush()
         
         # Convert to WAV if needed (model expects WAV)
         if file_ext != '.wav':
@@ -131,16 +139,21 @@ async def predict_audio(
             temp_wav = tempfile.mktemp(suffix='.wav')
             
             try:
-                # Load audio with pydub (supports many formats)
-                audio = AudioSegment.from_file(temp_input)
+                # Check input file
+                logger.info(f"Input file exists: {os.path.exists(temp_input)}")
+                logger.info(f"Input file size: {os.path.getsize(temp_input)} bytes")
+                logger.info(f"Input file path: {temp_input}")
+
+                # Load audio with pydub
+                sound = AudioSegment.from_file(temp_input, format="webm")
                 
                 # Convert to model's expected format
-                audio = audio.set_frame_rate(16000)  # Model expects 16kHz
-                audio = audio.set_channels(1)        # Mono
-                audio = audio.set_sample_width(2)    # 16-bit
+                sound = sound.set_frame_rate(16000)  # Model expects 16kHz
+                sound = sound.set_channels(1)        # Mono
+                sound = sound.set_sample_width(2)    # 16-bit
                 
                 # Export as WAV
-                audio.export(temp_wav, format='wav')
+                sound.export(temp_wav, format='wav')
                 audio_path = temp_wav
                 
                 logger.info(f"Conversion successful")
@@ -154,7 +167,7 @@ async def predict_audio(
         logger.info(f"Processing file: {file.filename or 'uploaded_audio'}")
         
         # Run prediction
-        results = classifier.predict(audio_path)
+        results = classifier.predict(audio_path, use_diarization)
         
         # Add metadata
         results["filename"] = file.filename or "audio_blob"
@@ -163,6 +176,7 @@ async def predict_audio(
         
         # Remove ground_truth field if present (not relevant for API)
         results.pop("ground_truth", None)
+        results.pop("correct", None)
         
         # Log result
         if results['overall'] == "No Speech":
@@ -342,3 +356,42 @@ if __name__ == "__main__":
         port=args.port,
         reload=args.reload
     )
+
+# Response Comparison
+# Without Diarization
+# {
+#   "overall": "Fake",
+#   "mean_probability": 0.4813,
+#   "confidence": 0.3336,
+#   "details": [],  // ← Empty
+#   "duration_config": [{
+#     "use_diarization": false,
+#     "diarization_requested": false,
+#     "diarization_available": true
+#   }]
+# }
+# With Diarization
+# {
+#   "overall": "Fake",
+#   "mean_probability": 0.4813,
+#   "confidence": 0.3336,
+#   "details": [  // ← Populated with segments
+#     {
+#       "speaker": "SPEAKER_00",
+#       "time": "0.3-1.4s",
+#       "result": "Fake",
+#       "probability": 0.6752
+#     },
+#     {
+#       "speaker": "SPEAKER_00",
+#       "time": "2.9-4.4s",
+#       "result": "Fake",
+#       "probability": 0.8772
+#     }
+#   ],
+#   "duration_config": [{
+#     "use_diarization": true,
+#     "diarization_requested": true,
+#     "diarization_available": true
+#   }]
+# }

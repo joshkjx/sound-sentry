@@ -69,6 +69,8 @@ class AudioClassifier:
     # Loads pyannote embedding model, classifier, and setups.
     # Differences from original DeepSonar:
     # - Uses pretrained pyannote as the Speaker Recognition model.
+    # - Added noise reduction preprocessing
+    # - Optimized VAD parameters for cafe noise
     def __init__(self):
         # Load pyannote embedding model
         local_model_path = os.path.join(MODEL_DIR, "pyannote-embedding", "pytorch_model.bin")
@@ -126,7 +128,7 @@ class AudioClassifier:
             raise RuntimeError("Failed to load diarization model from local or online source")
         self.diar_pipeline = self.diar_pipeline.to(torch.device("cpu"))
 
-        # Load segmentation model for VAD
+        # Load segmentation model and setup VAD pipeline with optimized parameters
         local_seg_path = os.path.join(MODEL_DIR, "pyannote-segmentation-3", "pytorch_model.bin")
         if os.path.exists(local_seg_path):
             if VERBOSE:
@@ -263,8 +265,12 @@ class AudioClassifier:
     # Helper to predict on a waveform and format the result.
     def predict_and_format(self, waveform: torch.Tensor, threshold: float) -> dict:
         prob_fake = self.predict_single_segment(waveform)
+        
+        # Determine result based on threshold
+        result = "Fake" if prob_fake >= threshold else "Real"
+        
+        # Calculate confidence as distance from threshold
         confidence = abs(prob_fake - threshold)
-        result = "Fake" if prob_fake > threshold else "Real"
         
         return {
             'prob_fake': prob_fake,
@@ -330,6 +336,11 @@ class AudioClassifier:
                 results["details"].append({
                     "speaker": speaker,
                     "time": f"{turn.start:.1f}-{turn.end:.1f}s",
+                    "start_time": float(turn.start),
+                    "end_time": float(turn.end),
+                    "result": pred_info['result'],
+                    "probability": float(pred_info['prob_fake']),
+                    "confidence": float(pred_info['confidence'])
                 })
 
                 segment_probs.append(pred_info['prob_fake'])
@@ -357,7 +368,8 @@ class AudioClassifier:
             results["message"] = f"Diarization error: {e}"
 
     # Uses pyannote segmentation-3.0 model to detect presence of speech.
-    # Returns True if at least one segment exceeds 0.5 confidence for speech.
+    # Now uses higher threshold for cafe noise robustness.
+    # Expects waveform to already be preprocessed if needed
     def has_speech(self, waveform: torch.Tensor) -> bool:
         try:
             # Additional check: spectral characteristics
@@ -404,8 +416,8 @@ class AudioClassifier:
                 print(f"  Speech ratio (threshold={self.vad_speech_threshold}): {speech_ratio:.3f}")
             
             # Check for continuous background noise vs actual speech
-            # Real speech and deepfakes have variation in speech probability over time
-            # Pure background noise has more uniform/constant speech probability
+            # Use audio envelope (amplitude variation) rather than just speech probability
+            # Speech has natural amplitude modulation, background noise is more constant
             if speech_ratio > 0.95:
                 # Calculate envelope variation in the audio signal
                 audio_np = waveform.cpu().numpy().flatten()
@@ -431,6 +443,7 @@ class AudioClassifier:
                     
                     # Very low energy variation = likely continuous background noise
                     # Speech (real or fake) has energy modulation from phonemes/words
+                    
                     if energy_cv < 0.5:  # Low variation = background noise
                         if VERBOSE:
                             print("  Rejected: low energy variation (continuous background noise)")
@@ -439,7 +452,7 @@ class AudioClassifier:
             return bool(speech_ratio > 0.10)
 
         except Exception as e:
-            print(f"VAD inference also failed: {e}")
+            print(f"VAD inference failed: {e}")
             return False
 
     # Predicts on the supplied audio (inference).
@@ -449,7 +462,9 @@ class AudioClassifier:
     # - Flags as fake if any segment greater than classification threshold
     # Differences from original DeepSonar:
     # - Added diarization integration.
-    def predict(self, audio_path: str) -> dict:
+    # - Added in-memory noise reduction preprocessing (for VAD only)
+    # - Added optional diarization control (default: False)
+    def predict(self, audio_path: str, enable_diarization: bool = False) -> dict:
         results = {
             "overall": "Real",
             "message": "",
@@ -492,17 +507,27 @@ class AudioClassifier:
                 print("  No speech: audio is too short (<1s)")
             return results
         
+        # Check for speech using preprocessed waveform (noise-robust VAD)
         if not self.has_speech(waveform_for_vad):
             results["overall"] = "No Speech"
             results["message"] = "No human speech detected"
             if VERBOSE:
-                print("  No speech: pyannote found no speaker")
+                print("  No speech: pyannote VAD found no speaker")
             return results
         
         # Get duration-aware configuration
         duration_config = self.get_duration_config(duration, self.default_threshold)
         threshold = duration_config['threshold']
+        # Determine if diarization should be used
+        # Priority: user preference > duration-based automatic decision
         use_diarization = duration_config['use_diarization']
+
+
+        # If user requested diarization, use it
+        # Otherwise, default to OFF (enable_diarization parameter default is False)
+        if not enable_diarization:
+            use_diarization = False
+
         results["duration_config"].append({
             'duration': duration_config['duration'],
             'category': duration_config['category'],
