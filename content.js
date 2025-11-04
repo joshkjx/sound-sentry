@@ -136,10 +136,8 @@ class AudioCapture {
     // CAPTURE RESET AND RETRY LOGIC
     // ============================================
     resetCaptureState() {
-
+        this.sendGraphReset();
         this.stopCapture(true);
-        //TODO: Save current capture state for error handling
-
         this.videoCurrentTime = 0;
         this.currentVideo = null;
         this.mediaStream = null;
@@ -371,6 +369,21 @@ class AudioCapture {
         console.log("Confidence: " + confidence);
         console.log("Chunks Received:" + chunkCount);
     }
+
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+
+    //Reset Graph in UI
+    sendGraphReset() {
+        if (this.port) {
+            console.log("Sending GRAPH_RESET message to Service Worker.");
+            this.port.postMessage({
+                type: 'GRAPH_RESET'
+            });
+        }
+    }
+
 }
 // ============================================
 // INITIALIZATION
