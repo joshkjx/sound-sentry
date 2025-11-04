@@ -35,6 +35,11 @@ class AudioProcessor {
                 data: this.latestAudioData,
                 metadata: this.latestAudioMetadata
             });
+            port.onMessage.addListener((message) => {
+                if (message.type === 'CONFIDENCE_WARNING') {
+                    this.updateActionIcon(message.status);
+                }
+            });
             port.onDisconnect.addListener(() => {
                 this.handlePopupPortDisconnection(port);
             });
@@ -63,6 +68,7 @@ class AudioProcessor {
         this.cleanUpOnDisconnect();
     }
     cleanUpOnDisconnect() {
+        this.updateActionIcon(false);
         this.currentRecordingSessionChunksProcessed = 0;
         this.currentRecordingSessionRecords.length = 0; // TODO - check if this triggers a bug in the visualisation once that's up.
         this.currentRecordingSessionStartTime = null;
@@ -82,6 +88,10 @@ class AudioProcessor {
                 console.log('audioData length:', message.audioData?.length);
                 console.log('mimeType:', message.mimeType);
                 this.handleAudioChunk(message.audioData, message.mimeType, message.timestamp, message.duration, message.videoUrl, message.videoTitle, message.playbackTimestamp ,port);
+                break;
+            case "GRAPH_RESET":
+                console.log("Received GRAPH_RESET request. Broadcasting to popups.");
+                this.broadcastGraphReset();
                 break;
         }
     }
@@ -133,9 +143,6 @@ class AudioProcessor {
             this.sendProcessedAudio(port, data, this.latestAudioMetadata); // send audio back to content script on received port
             console.log('Broadcasting to popups...');
             this.broadcastToPopups(this.latestAudioData, this.latestAudioMetadata);
-            // // console.log(this.latestAudioData)
-            // console.log("this is metadata")
-            // console.log(this.latestAudioMetadata);
             console.log('Service worker broadcast to popup');
         }
         catch (e) {
@@ -165,6 +172,37 @@ class AudioProcessor {
         }
         this.currentRecordingSessionRecords.push(audioRecord);
     }
+
+    /**
+     * Updates the extension's toolbar icon and badge based on the warning status.
+     * This is called when the popup script sends a 'CONFIDENCE_WARNING' message.
+     * @param {boolean} isWarning - True if confidence is above the threshold (AI suspected).
+     */
+    updateActionIcon(isWarning) {
+        if (isWarning) {
+            console.log('High AI Confidence detected: Updating action icon to WARNING.');
+            // Set a red badge to draw attention
+            chrome.action.setBadgeText({ text: "AI" });
+            chrome.action.setBadgeBackgroundColor({ color: "#FF0000" }); // Red
+        } else {
+            console.log('Confidence below threshold: Reverting action icon to default.');
+            chrome.action.setBadgeText({ text: "" }); // Clear badge text
+        }
+    }
+
+    //Broadcast to pop.js to reset graph 
+    broadcastGraphReset() {
+        if (this.popupPorts.size === 0) {
+            return;
+        }
+        this.popupPorts.forEach(port => {
+            const message = {
+                type: "GRAPH_RESET" // New message type for the popup to handle
+            };
+            this.sendDataToPopup(port, message);
+        });
+    }
+
     // ============================================
     // API COMMUNICATION
     // ============================================

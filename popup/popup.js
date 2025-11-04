@@ -6,7 +6,7 @@ class PopupController {
         this.chartData = {
             labels: [],
             datasets: [{
-                label: 'Confidence Over Time',
+                label: 'Probability Over Time',
                 data: [],
                 borderWidth: 2,
                 borderColor: 'rgb(75, 192, 192)',
@@ -15,6 +15,7 @@ class PopupController {
                 tension: 0.2
             }]
         };
+        this.warningTriggered = false;
         this.init();
     }
     init() {
@@ -46,6 +47,11 @@ class PopupController {
             messageData = message.data;
             messageMetadata = message.metadata;
             this.handleDataUpdate(messageData, messageMetadata);
+        }
+        else if (message && message.type === "GRAPH_RESET") {
+            console.log("Graph reset received. Clearing chart.");
+            this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: false });
+            this.resetData();
         }
         else {
             const fallback = {
@@ -129,7 +135,7 @@ class PopupController {
                         title: { display: true, text: 'Playback time' }
                     },
                     y: {
-                        title: { display: true, text: 'Confidence' },
+                        title: { display: true, text: 'Probability' },
                         min: 0,
                         max: 1
                     }
@@ -145,6 +151,7 @@ class PopupController {
 
         const playbackSeconds = metadata.playbackTimestamp
         const confidence = data.confidence;
+        const decision = data.decision;
 
          // Format playback time into mm:ss
         const minutes = Math.floor(playbackSeconds / 60);
@@ -155,10 +162,23 @@ class PopupController {
         this.chartData.labels.push(formattedPlayback);
         this.chartData.datasets[0].data.push(confidence);
 
-        // Optional: limit chart length to 10 points
+        // limit chart length to 10 points
         if (this.chartData.labels.length > 10) {
             this.chartData.labels.shift();
             this.chartData.datasets[0].data.shift();
+        }
+
+        // store decision history
+        if (!this.decisionHistory) this.decisionHistory = [];
+        this.decisionHistory.push(decision);
+
+        // Optional: limit chart & history length to 10 points
+        if (this.chartData.labels.length > 10) {
+            this.chartData.labels.shift();
+            this.chartData.datasets[0].data.shift();
+        }
+        if (this.decisionHistory.length > 10) {
+            this.decisionHistory.shift();
         }
 
         // Update the existing chart instance
@@ -166,34 +186,67 @@ class PopupController {
     }
 
     checkWarningStatus() {
-        const WARN_THRESHOLD = 0.65;
         const LAST_N_POINTS = 5;
+        const REQUIRED_AI_COUNT = 2;
 
-        const confidenceData = this.chartData.datasets[0].data;
         const warningBox = document.getElementById('warning-box');
-
-        if (!warningBox || confidenceData.length < LAST_N_POINTS) {
-            // Not enough data points to check, ensure warning is hidden
-            if (warningBox) warningBox.classList.add('hidden');
+        // if (!warningBox || !this.decisionHistory || this.decisionHistory.length < LAST_N_POINTS) {
+        //     if (warningBox) warningBox.classList.add('hidden');
+        //     return;
+        // }
+        if (this.warningTriggered) {
+            warningBox.classList.remove('hidden');
             return;
         }
 
-        // Get last N confidence points
-        const lastN = confidenceData.slice(-LAST_N_POINTS);
+         // Get the last N decisions
+        const lastNDecisions = this.decisionHistory.slice(-LAST_N_POINTS);
 
-        // Calculate the average confidence
-        const sum = lastN.reduce((a, b) => a + b, 0);
-        const averageConfidence = sum / LAST_N_POINTS;
+        //Count how many are AI
+        const aiCount = lastNDecisions.filter(d => d === 'AI').length;
 
-        console.log(`Last ${LAST_N_POINTS} average confidence: ${averageConfidence.toFixed(4)}`);
+        console.log(`Last ${LAST_N_POINTS} decisions: ${lastNDecisions.join(', ')}`);
+        console.log(`AI count in last ${LAST_N_POINTS}: ${aiCount}`);
 
-        if (averageConfidence >= WARN_THRESHOLD) {
+        if (aiCount >= REQUIRED_AI_COUNT) {
             // Show the warning box
+            this.warningTriggered = true;
             warningBox.classList.remove('hidden');
-        } else {
+            this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: true });
+        }
+         else {
             // Hide the warning box
             warningBox.classList.add('hidden');
         }
+        
+    }
+
+    resetData() {
+        if (!this.chartInstance) return;
+
+        // Clear all data arrays
+        this.chartData.labels.length = 0;
+        this.chartData.datasets[0].data.length = 0;
+
+        // Clear decision history
+        if (this.decisionHistory) {
+            this.decisionHistory.length = 0;
+        }
+        this.warningTriggered = false;
+
+        // Update DOM elements to show 0
+        this.updateChunkCount(0);
+        this.updateDecision("N/A");
+        this.updateConfidence(0);
+        this.updateVideoTitle("Awaiting Video Data...");
+        
+        // Hide warning box
+        const warningBox = document.getElementById('warning-box');
+        if (warningBox) warningBox.classList.add('hidden');
+
+        this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: false });
+        // Redraw chart
+        this.chartInstance.update();
     }
 
 }

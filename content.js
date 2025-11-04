@@ -105,7 +105,6 @@ class AudioCapture {
         // private method that resets capture state if YouTube SPA navigation is detected.
         const handleNavigation = () => {
             console.log('YouTube navigation detected. Resetting video state.');
-            this.resetCaptureState();
             this.checkVideoWithRetry();
         }
         //Check for navigation on YouTube, an SPA
@@ -137,10 +136,8 @@ class AudioCapture {
     // CAPTURE RESET AND RETRY LOGIC
     // ============================================
     resetCaptureState() {
-
+        this.sendGraphReset();
         this.stopCapture(true);
-        //TODO: Save current capture state for error handling
-
         this.videoCurrentTime = 0;
         this.currentVideo = null;
         this.mediaStream = null;
@@ -158,6 +155,7 @@ class AudioCapture {
     checkVideoWithRetry(retries = 3) {
         const video = document.querySelector('video.html5-main-video');
             if (video) {
+                this.resetCaptureState();
                 this.attachVideoListeners(video);
                 console.log('New video element found and listeners reattached');
             } else if (retries > 0) {
@@ -245,7 +243,6 @@ class AudioCapture {
             return;
         }
         console.log(`Captured ${audioTracks.length} audio track(s)`);
-
         if (!window.MediaRecorder) {
             console.log('MediaRecorder not supported by browser');
             return;
@@ -439,6 +436,21 @@ class AudioCapture {
         console.log("Confidence: " + confidence);
         console.log("Chunks Received:" + chunkCount);
     }
+
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+
+    //Reset Graph in UI
+    sendGraphReset() {
+        if (this.port) {
+            console.log("Sending GRAPH_RESET message to Service Worker.");
+            this.port.postMessage({
+                type: 'GRAPH_RESET'
+            });
+        }
+    }
+
 }
 // ============================================
 // INITIALIZATION
