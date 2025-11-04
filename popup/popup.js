@@ -211,7 +211,7 @@ class PopupController {
          else {
             // Hide the warning box
             warningBox.classList.add('hidden');
-            this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: false });
+            // this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: false });
         }
         
     }
