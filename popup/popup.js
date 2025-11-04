@@ -134,7 +134,7 @@ class PopupController {
                         title: { display: true, text: 'Playback time' }
                     },
                     y: {
-                        title: { display: true, text: 'Confidence' },
+                        title: { display: true, text: 'Probability' },
                         min: 0,
                         max: 1
                     }
