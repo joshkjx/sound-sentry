@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, confusion_matrix
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import joblib
@@ -287,6 +287,11 @@ if __name__ == "__main__":
     test_f1 = f1_score(labels_test, test_pred)
     print(f"\nTest Accuracy: {test_acc:.4f}, AUC: {test_auc:.4f}, "
           f"F1: {test_f1:.4f}")
+    print("\nTest Confusion Matrix:")
+    cm = confusion_matrix(labels_test, test_pred, labels=[0, 1])
+    print("                     Predicted Real (0)   Predicted Fake (1)")
+    print(f"Actual Real (0)      {cm[0][0]:<19} {cm[0][1]:<19}")
+    print(f"Actual Fake (1)      {cm[1][0]:<19} {cm[1][1]:<19}")
 
     # EER calculation
     # Differences: Added EER metric.
