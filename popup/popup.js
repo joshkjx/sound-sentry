@@ -15,6 +15,7 @@ class PopupController {
                 tension: 0.2
             }]
         };
+        this.warningTriggered = false;
         this.init();
     }
     init() {
@@ -189,8 +190,12 @@ class PopupController {
         const REQUIRED_AI_COUNT = 2;
 
         const warningBox = document.getElementById('warning-box');
-        if (!warningBox || !this.decisionHistory || this.decisionHistory.length < LAST_N_POINTS) {
-            if (warningBox) warningBox.classList.add('hidden');
+        // if (!warningBox || !this.decisionHistory || this.decisionHistory.length < LAST_N_POINTS) {
+        //     if (warningBox) warningBox.classList.add('hidden');
+        //     return;
+        // }
+        if (this.warningTriggered) {
+            warningBox.classList.remove('hidden');
             return;
         }
 
@@ -205,13 +210,13 @@ class PopupController {
 
         if (aiCount >= REQUIRED_AI_COUNT) {
             // Show the warning box
+            this.warningTriggered = true;
             warningBox.classList.remove('hidden');
             this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: true });
         }
          else {
             // Hide the warning box
             warningBox.classList.add('hidden');
-            // this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: false });
         }
         
     }
@@ -227,6 +232,7 @@ class PopupController {
         if (this.decisionHistory) {
             this.decisionHistory.length = 0;
         }
+        this.warningTriggered = false;
 
         // Update DOM elements to show 0
         this.updateChunkCount(0);
