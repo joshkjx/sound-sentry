@@ -1,2 +1,8 @@
 /node_modules/
 /.idea/
+/testing_utils/pyannote-segmentation-3
+/testing_utils/pyannote-speaker-diarization-community-1
+/testing_utils/requirements.txt
+/testing_utils/Dockerfile
+/backend/api/.env/
+backend/__pycache__/*
