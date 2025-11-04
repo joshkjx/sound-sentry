@@ -6,7 +6,7 @@ class PopupController {
         this.chartData = {
             labels: [],
             datasets: [{
-                label: 'Confidence Over Time',
+                label: 'Probability Over Time',
                 data: [],
                 borderWidth: 2,
                 borderColor: 'rgb(75, 192, 192)',
@@ -49,6 +49,7 @@ class PopupController {
         }
         else if (message && message.type === "GRAPH_RESET") {
             console.log("Graph reset received. Clearing chart.");
+            this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: false });
             this.resetData();
         }
         else {

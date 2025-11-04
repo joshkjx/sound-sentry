@@ -102,7 +102,7 @@ class AudioProcessor {
 
             // Build metadata for visualisation handling (maybe)
             const metadata = {
-                framecount: 0, // TODO
+                framecount: 0, 
                 duration: duration,
                 startTime: timestamp,
                 endTime: timestamp + duration,
@@ -122,9 +122,6 @@ class AudioProcessor {
             this.sendProcessedAudio(port, data, this.latestAudioMetadata); // send audio back to content script on received port
             console.log('Broadcasting to popups...');
             this.broadcastToPopups(this.latestAudioData, this.latestAudioMetadata);
-            // // console.log(this.latestAudioData)
-            // console.log("this is metadata")
-            // console.log(this.latestAudioMetadata);
             console.log('Service worker broadcast to popup');
         }
         catch (e) {
