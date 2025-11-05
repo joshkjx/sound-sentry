@@ -340,7 +340,7 @@ class AudioCapture {
     // ============================================
     // AUDIO CHUNK HANDLING
     // ============================================
-    // Function to process each blob of 3s recorded data
+    // Function to process each blob of 4s recorded data
     async handleAudioChunk(blob) {
         if (this.vidCaptureTimeout){ // If timeout is active, clear the timeout
             clearTimeout(this.vidCaptureTimeout);
