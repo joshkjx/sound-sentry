@@ -21,6 +21,7 @@ class PopupController {
     init() {
         this.setupServiceWorkerConnection();
         this.initChart()
+        this.port.postMessage({ type: 'CONFIDENCE_WARNING', status: false });
         // this.requestCurrentData();
     }
     setupServiceWorkerConnection() {

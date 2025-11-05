@@ -61,6 +61,8 @@ class AudioProcessor {
         }
     }
     handlePopupPortDisconnection(port) {
+        console.log("Port is now disconnecting...")
+        this.updateActionIcon(false);
         this.popupPorts.delete(port);
     }
     handlePortDisconnection(port) {
@@ -192,6 +194,7 @@ class AudioProcessor {
 
     //Broadcast to pop.js to reset graph 
     broadcastGraphReset() {
+        console.log("Broadcasting graph reset message...")
         if (this.popupPorts.size === 0) {
             return;
         }
