@@ -105,12 +105,14 @@ class AudioCapture {
         // private method that resets capture state if YouTube SPA navigation is detected.
         const handleNavigation = () => {
             console.log('YouTube navigation detected. Resetting video state.');
+            this.resetCaptureState();
             this.checkVideoWithRetry();
         }
         //Check for navigation on YouTube, an SPA
         document.addEventListener('yt-navigate-finish', handleNavigation);
         const observer = new MutationObserver(() => {
             if (!this.currentVideo) {
+                this.resetCaptureState();
                 this.checkVideoWithRetry();
             }
         });
@@ -155,7 +157,6 @@ class AudioCapture {
     checkVideoWithRetry(retries = 3) {
         const video = document.querySelector('video.html5-main-video');
             if (video) {
-                this.resetCaptureState();
                 this.attachVideoListeners(video);
                 console.log('New video element found and listeners reattached');
             } else if (retries > 0) {

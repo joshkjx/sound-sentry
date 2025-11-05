@@ -203,7 +203,7 @@ class PopupController {
         const lastNDecisions = this.decisionHistory.slice(-LAST_N_POINTS);
 
         //Count how many are AI
-        const aiCount = lastNDecisions.filter(d => d === 'AI').length;
+        const aiCount = lastNDecisions.filter(d => d === 'Fake').length;
 
         console.log(`Last ${LAST_N_POINTS} decisions: ${lastNDecisions.join(', ')}`);
         console.log(`AI count in last ${LAST_N_POINTS}: ${aiCount}`);
