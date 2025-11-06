@@ -132,7 +132,6 @@ async def predict_audio(
             temp_input = tmp.name
             shutil.copyfileobj(file.file, tmp)
             tmp.flush()
-            tmp.flush()
         
         # Convert to WAV if needed (model expects WAV)
         if file_ext != '.wav':
