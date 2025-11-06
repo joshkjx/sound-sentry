@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, confusion_matrix
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import joblib
@@ -12,8 +12,7 @@ from sklearn.metrics import roc_curve
 from imblearn.over_sampling import SMOTE
 from .utils import (
     DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE, 
-    SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE,
-    BEST_LR, BEST_WEIGHT_DECAY, BEST_HIDDEN_SIZE, BEST_DROPOUT_RATE
+    SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE
 )
 # Prevent terminal clearing on Windows
 os.environ['LOKY_MAX_CPU_COUNT'] = '1'
@@ -49,6 +48,12 @@ class BinaryClassifier(nn.Module):
 
 
 if __name__ == "__main__":
+    # Best hyperparameter set obtained from gridsearch
+    BEST_LR = 0.0005
+    BEST_WEIGHT_DECAY = 1e-5
+    BEST_HIDDEN_SIZE = 512
+    BEST_DROPOUT_RATE = 0.5
+    
     print("--- Using Hyperparameters ---")
     print(f"Learning Rate: {BEST_LR}")
     print(f"Weight Decay: {BEST_WEIGHT_DECAY}")
@@ -206,7 +211,7 @@ if __name__ == "__main__":
 
     # Convert to tensors
     features_train_tensor = torch.tensor(
-        features_train_res, dtype=torch.float32)
+    features_train_res, dtype=torch.float32)
     labels_train_tensor = torch.tensor(labels_train_res, dtype=torch.float32)
     features_val_tensor = torch.tensor(features_val, dtype=torch.float32)
     labels_val_tensor = torch.tensor(labels_val, dtype=torch.float32)
@@ -220,7 +225,7 @@ if __name__ == "__main__":
                              hidden_size=BEST_HIDDEN_SIZE,
                              dropout_rate=BEST_DROPOUT_RATE).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()  # Handles logits directly
-    optimizer = optim.Adam(
+    optimizer = optim.AdamW(
         model.parameters(),
         # Lower learning rate for smoother convergence
         lr=BEST_LR,
@@ -282,6 +287,11 @@ if __name__ == "__main__":
     test_f1 = f1_score(labels_test, test_pred)
     print(f"\nTest Accuracy: {test_acc:.4f}, AUC: {test_auc:.4f}, "
           f"F1: {test_f1:.4f}")
+    print("\nTest Confusion Matrix:")
+    cm = confusion_matrix(labels_test, test_pred, labels=[0, 1])
+    print("                     Predicted Real (0)   Predicted Fake (1)")
+    print(f"Actual Real (0)      {cm[0][0]:<19} {cm[0][1]:<19}")
+    print(f"Actual Fake (1)      {cm[1][0]:<19} {cm[1][1]:<19}")
 
     # EER calculation
     # Differences: Added EER metric.

@@ -211,7 +211,7 @@ if __name__ == "__main__":
 
     # Convert to tensors
     features_train_tensor = torch.tensor(
-        features_train_res, dtype=torch.float32)
+    features_train_res, dtype=torch.float32)
     labels_train_tensor = torch.tensor(labels_train_res, dtype=torch.float32)
     features_val_tensor = torch.tensor(features_val, dtype=torch.float32)
     labels_val_tensor = torch.tensor(labels_val, dtype=torch.float32)
@@ -225,7 +225,7 @@ if __name__ == "__main__":
                              hidden_size=BEST_HIDDEN_SIZE,
                              dropout_rate=BEST_DROPOUT_RATE).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()  # Handles logits directly
-    optimizer = optim.Adam(
+    optimizer = optim.AdamW(
         model.parameters(),
         # Lower learning rate for smoother convergence
         lr=BEST_LR,
