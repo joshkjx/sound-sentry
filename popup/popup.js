@@ -77,11 +77,11 @@ class PopupController {
             let borderColor = '#333';
             let textColor = '#333';
 
-            if (data.decision === 'AI') {
+            if (data.decision === 'Fake') {
                 bgColor = '#f8d7da';     
                 borderColor = '#dc3545';
                 textColor = '#dc3545';  
-            } else if (data.decision === 'Not AI') {
+            } else if (data.decision === 'Real') {
                 bgColor = '#d4edda';     
                 borderColor = '#28a745';
                 textColor = '#28a745';  
