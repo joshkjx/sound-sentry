@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, confusion_matrix
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import joblib
@@ -12,8 +12,7 @@ from sklearn.metrics import roc_curve
 from imblearn.over_sampling import SMOTE
 from .utils import (
     DATA_DIR, FEATURES_OUTPUT_FILE, LABELS_OUTPUT_FILE, 
-    SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE,
-    BEST_LR, BEST_WEIGHT_DECAY, BEST_HIDDEN_SIZE, BEST_DROPOUT_RATE
+    SCALER_OUTPUT_FILE, MODEL_OUTPUT_FILE, DEVICE
 )
 # Prevent terminal clearing on Windows
 os.environ['LOKY_MAX_CPU_COUNT'] = '1'
@@ -49,6 +48,12 @@ class BinaryClassifier(nn.Module):
 
 
 if __name__ == "__main__":
+    # Best hyperparameter set obtained from gridsearch
+    BEST_LR = 0.0005
+    BEST_WEIGHT_DECAY = 1e-5
+    BEST_HIDDEN_SIZE = 512
+    BEST_DROPOUT_RATE = 0.5
+    
     print("--- Using Hyperparameters ---")
     print(f"Learning Rate: {BEST_LR}")
     print(f"Weight Decay: {BEST_WEIGHT_DECAY}")
@@ -161,52 +166,54 @@ if __name__ == "__main__":
     joblib.dump(feature_scaler, scaler_path)
     print(f"\nScaler saved to {scaler_path}")
 
-    # Augment with noise (doubles training data)
+    # Classification with imbalanced classes by performing over-sampling.
+    # Differences from original DeepSonar:
+    # - Apply SMOTE to train data for imbalance BEFORE noise augmentation
+    # - This prevents SMOTE from interpolating between artificially similar noisy samples
+    print("\nApplying SMOTE to balance classes...")
+    smote = SMOTE(random_state=4347)
+    resample_result = smote.fit_resample(features_train_scaled, labels_train)
+    features_train_balanced, labels_train_balanced = resample_result[0], resample_result[1]
+
+    if VERBOSE:
+        print(f"After SMOTE: {features_train_balanced.shape[0]} samples")
+        print(f"Label distribution after SMOTE:")
+        print(pd.Series(np.array(labels_train_balanced)).value_counts())
+
+    # Augment with noise (4× data)
     # Differences from original DeepSonar:
     # - Added noise augmentation to improve robustness.
+    # - Applied AFTER SMOTE to augment the balanced dataset
     print("\nAugmenting training data with various noise levels...")
 
     # Create 3 augmented versions with different noise levels
-    augmented_features_list = [features_train_scaled]  # Original
-    augmented_labels_list = [labels_train]
+    augmented_features_list = [features_train_balanced]  # Original balanced
+    augmented_labels_list = [labels_train_balanced]
 
     # Noise augmentation (keeps full length)
     print("  Adding noise augmentation...")
     for noise_level, sigma in [('light', 0.005), ('medium', 0.01), ('heavy', 0.02)]:
-        noise = features_train_scaled + \
-            np.random.randn(*features_train_scaled.shape) * sigma
+        noise = features_train_balanced + \
+            np.random.randn(*features_train_balanced.shape) * sigma
         augmented_features_list.append(noise)
-        augmented_labels_list.append(labels_train)
+        augmented_labels_list.append(labels_train_balanced)
         print(
             f"    - {noise_level} noise (σ={sigma}): {noise.shape[0]} samples")
 
     # Combine all
-    features_train_augmented = np.vstack(augmented_features_list)
-    labels_train_augmented = np.hstack(augmented_labels_list)
+    features_train_res = np.vstack(augmented_features_list)
+    labels_train_res = np.hstack(augmented_labels_list)
 
     print(
-        f"After noise augmentation: {features_train_augmented.shape[0]} samples")
-    print(f"  Original: {features_train_scaled.shape[0]}")
-    print(f"  Light noise: {features_train_scaled.shape[0]}")
-    print(f"  Medium noise: {features_train_scaled.shape[0]}")
-    print(f"  Heavy noise: {features_train_scaled.shape[0]}")
-
-    # Classification with imbalanced classes by performing over-sampling.
-    # Differences from original DeepSonar:
-    # - Apply SMOTE to train data for imbalance
-    smote = SMOTE(random_state=4347)
-    resample_result = smote.fit_resample(
-        features_train_augmented, labels_train_augmented)
-    features_train_res, labels_train_res = resample_result[0], resample_result[1]
-
-    if VERBOSE:
-        print(f"After SMOTE: {features_train_res.shape[0]} samples")
-        print(f"Label distribution after SMOTE:")
-        print(pd.Series(np.array(labels_train_res)).value_counts())
+        f"After noise augmentation: {features_train_res.shape[0]} samples")
+    print(f"  Original balanced: {features_train_balanced.shape[0]}")
+    print(f"  Light noise: {features_train_balanced.shape[0]}")
+    print(f"  Medium noise: {features_train_balanced.shape[0]}")
+    print(f"  Heavy noise: {features_train_balanced.shape[0]}")
 
     # Convert to tensors
     features_train_tensor = torch.tensor(
-        features_train_res, dtype=torch.float32)
+    features_train_res, dtype=torch.float32)
     labels_train_tensor = torch.tensor(labels_train_res, dtype=torch.float32)
     features_val_tensor = torch.tensor(features_val, dtype=torch.float32)
     labels_val_tensor = torch.tensor(labels_val, dtype=torch.float32)
@@ -220,7 +227,7 @@ if __name__ == "__main__":
                              hidden_size=BEST_HIDDEN_SIZE,
                              dropout_rate=BEST_DROPOUT_RATE).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()  # Handles logits directly
-    optimizer = optim.Adam(
+    optimizer = optim.AdamW(
         model.parameters(),
         # Lower learning rate for smoother convergence
         lr=BEST_LR,
@@ -282,6 +289,11 @@ if __name__ == "__main__":
     test_f1 = f1_score(labels_test, test_pred)
     print(f"\nTest Accuracy: {test_acc:.4f}, AUC: {test_auc:.4f}, "
           f"F1: {test_f1:.4f}")
+    print("\nTest Confusion Matrix:")
+    cm = confusion_matrix(labels_test, test_pred, labels=[0, 1])
+    print("                     Predicted Real (0)   Predicted Fake (1)")
+    print(f"Actual Real (0)      {cm[0][0]:<19} {cm[0][1]:<19}")
+    print(f"Actual Fake (1)      {cm[1][0]:<19} {cm[1][1]:<19}")
 
     # EER calculation
     # Differences: Added EER metric.

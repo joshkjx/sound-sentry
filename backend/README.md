@@ -1,60 +1,340 @@
-## Setup
+# Sound Sentry Backend
 
-Tested with [In-the-Wild](https://www.kaggle.com/datasets/abdallamohamed312/in-the-wild-audio-deepfake) Audio Deepfake Dataset.
+A FastAPI-based backend service for detecting Deepfake audio using TKAN (Top-K Activated Neurons) features and speaker diarization.
 
-Implemented pyannote [
-speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) for the speaker recognition (SR) model.
+## Overview
 
-Updated DeepSonar to use pytorch over tensorflow, as the core of DeepSonar is a classifier.
+This system implements an audio deepfake detection pipeline combining:
+- **Voice Activity Detection (VAD)**: Filters out silent or non-speech audio
+- **TKAN Feature Extraction**: Neural network activation-based features for deepfake detection
+- **PyAnnote Speaker Diarization**: Speaker segmentation and identification
+
+Trained with the [In-the-Wild Audio Deepfake Dataset](https://www.kaggle.com/datasets/abdallamohamed312/in-the-wild-audio-deepfake).
+
+## Directory
 
 ```text
-CS5647Project/
-├── data/
-│   ├── release-in-the-wild/
-│   ├── feature_scaler.pkl
-│   ├── features.npy
-│   ├── labels.npy
-│   └── trained_model.pth
-├── model/
-│   └── pyannote-speaker-diarization-community-1/
-└── scripts/
-    ├── main.py
-    ├── feature_extractor.py
-    ├── train_classifier.py
-    ├── predict_audio.py
-    └── utils.py
+/backend/
+├── api/
+│   ├── __init__.py
+│   └── app.py                    # FastAPI server (main entry point)
+│
+├── scripts/
+│   ├── __init__.py
+│   ├── entry.py                  # Pre-download HuggingFace models
+│   ├── feature_extractor.py      # TKAN feature extraction
+│   ├── main.py                   # Simple entry point
+│   ├── predict_audio.py          # Audio classification logic
+│   ├── run_test.py               # Model testing and evaluation
+│   ├── train_classifier.py       # Model training (single run)
+│   ├── train_classifier_kfold.py # K-fold cross-validation training
+│   ├── train_gridsearch.py       # Hyperparameter tuning with grid search
+│   └── utils.py                  # Common utilities and constants
+│
+├── data/                         
+│   ├── release-in-the-wild/      # Dataset (if using In-the-Wild)
+│   ├── feature_scaler.pkl        # Feature normalization scaler
+│   ├── trained_model.pth         # Trained classifier weights
+│   ├── features.npy              # Extracted TKAN features (cached)
+│   └── labels.npy                # Training labels (cached)
+│
+├── model/                        
+│   └── pyannote/                 # Cached pyannote models (For offline use)
+│
+├── requirements.txt              # Python dependencies
+├── environment.yml               # Conda environment specification
+├── Dockerfile                    # Docker container image
+└── README.md                     # This documentation
 ```
 
-### Create conda environment
+## Required Dependencies
 
-To create conda environment:
+### System Dependencies
+- **Python 3.11**: Required for compatibility
+- **FFmpeg 7.x**: Audio processing and format conversion
+- **Audio codecs**: libiconv, libopus, lame, x264, x265
+- **CUDA 12.8** (optional): For GPU acceleration
 
-```python
-conda create -n cs5647project python=3.11 -y
-conda install "ffmpeg>=7,<8" libiconv libopus lame x264 x265 -y
+### Python Dependencies
+Key packages (see [requirements.txt](requirements.txt) for full list):
+- `torch==2.8.0` - PyTorch deep learning framework
+- `pyannote-audio==4.0.1` - Speaker diarization and VAD
+- `fastapi==0.120.1` - Web API framework
+- `uvicorn==0.38.0` - ASGI server
+- `torchcodec==0.7.0` - Audio/video encoding
+- `noisereduce==3.0.3` - Audio preprocessing
+- `pydub==0.25.1` - Audio format conversion
+- `scikit-learn`, `imbalanced-learn` - ML utilities
+
+## Installation
+
+### Option 1: Conda Environment
+
+**Note:** We use the `conda-forge` channel for all conda packages to ensure compatibility and access to the latest stable versions of FFmpeg and audio codecs.
+
+1\. **Create the conda environment (using conda-forge):**
+```bash
+conda create -n cs5647project python=3.11 -c conda-forge -y
+conda activate cs5647project
+```
+2\. **Install system dependencies (from conda-forge):**
+```bash
+conda install -c conda-forge "ffmpeg>=7,<8" libiconv libopus lame x264 x265 -y
+```
+3\. **Install PyTorch with CUDA support (GPU):**
+```bash
+pip install uv
 uv pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-uv pip install torchcodec==0.7.0 pyannote.audio
+```
+**Or for CPU only:**
+```bash
+uv pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0
+```
+4\. **Install remaining dependencies:**
+```bash
+uv pip install -r requirements.txt
+```
+5\. **Set up HuggingFace token (required for gated models):**
+```bash
+# Linux/Mac
+export HUGGING_FACE_TOKEN="hf_..."
+
+# Windows PowerShell
+$env:HUGGING_FACE_TOKEN="hf_..."
+```
+6\. **Pre-download pyannote models for offline use (optional):**
+```bash
+python scripts/entry.py
 ```
 
-### Global telemetry configuration
+### Option 2: Docker (Recommended for Production)
 
-To set telemetry preferences that persist across sessions:
+**Note:** Docker is intended for production deployment. Before building the Docker image, ensure all required files are present in the `data/` directory:
+- `trained_model.pth` - Trained classifier weights
+- `feature_scaler.pkl` - Feature normalization scaler
 
-```python
-from pyannote.audio.telemetry import set_telemetry_metrics
+These files are generated by completing the training workflow (see [Instructions](#instructions) section).
 
-# disable metrics globally
-set_telemetry_metrics(False, save_choice_as_default=True)
-```
+1\. **Build the Docker image:**
+```bash
+# Linux/Mac
+docker build --no-cache \
+  --build-arg HUGGING_FACE_TOKEN=hf_... \
+  -t cs5647 .
 
-### Create docker image
-```powershell
+# Windows PowerShell
 docker build --no-cache `
   --build-arg HUGGING_FACE_TOKEN=hf_... `
   -t cs5647 .
+```
+2\. **Run the container:**
+```bash
+# Linux/Mac
+docker run --gpus all -p 8000:8000 --name cs5647proj --rm \
+  -v $(pwd)/api:/app/api \
+  -v $(pwd)/scripts:/app/scripts \
+  cs5647
 
+# Windows PowerShell
 docker run --gpus all -p 8000:8000 --name cs5647proj --rm `
   -v ${PWD}/api:/app/api `
   -v ${PWD}/scripts:/app/scripts `
   cs5647
 ```
+
+## Pyannote Models - Gated Access
+
+### Accessing Gated Models
+
+This project uses **gated models** from pyannote.audio that require explicit user agreement:
+
+1. **Create a HuggingFace account** at [https://huggingface.co/join](https://huggingface.co/join)
+
+2. **Accept model licenses** by visiting each model page and clicking "Agree and access repository":
+   - [pyannote/embedding](https://huggingface.co/pyannote/embedding)
+   - [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0)
+   - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
+   
+
+3. **Generate access token**:
+   - Go to [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+   - Create a new token with "Read" permissions
+   - Copy the token (starts with `hf_...`)
+
+4. **Set the token** as environment variable (see Installation step 5)
+
+## Running the Backend
+
+### Start the FastAPI Server
+
+**Local development (localhost only):**
+```bash
+cd anti_deepfake_browser_ext/backend
+python api/app.py
+```
+
+**Custom host/port:**
+```bash
+python api/app.py --host 0.0.0.0 --port 8000
+```
+
+**With auto-reload (development):**
+```bash
+python api/app.py --reload
+```
+
+### API Endpoints
+
+#### `GET /` - Health Check
+Returns server status and version.
+
+#### `GET /health` - Detailed Health
+Checks if classifier is loaded.
+
+#### `POST /predict` - Single Audio Prediction
+Predict if audio is real or fake.
+
+**Parameters:**
+- `audio` (file): Audio file (WAV, MP3, WEBM, OGG, M4A, FLAC, OPUS, AAC)
+- `use_diarization` (bool, optional): Enable speaker diarization (default: false)
+
+**Response:**
+```json
+{
+  "overall": "Fake",
+  "mean_probability": 0.7234,
+  "confidence": 0.4468,
+  "details": [
+    {
+      "speaker": "SPEAKER_00",
+      "time": "0.3-1.4s",
+      "result": "Fake",
+      "probability": 0.6752
+    }
+  ],
+  "duration_config": {
+    "use_diarization": true,
+    "category": "normal"
+  }
+}
+```
+
+#### `POST /batch-predict` - Batch Prediction
+Process multiple audio files (max 10).
+
+#### `GET /info` - Model Information
+Returns model configuration and supported formats.
+
+### Testing the API
+
+**Using curl:**
+```bash
+# Simple prediction
+curl -X POST "http://localhost:8000/predict" \
+  -F "audio=@test_audio.wav"
+
+# With diarization
+curl -X POST "http://localhost:8000/predict" \
+  -F "audio=@test_audio.wav" \
+  -F "use_diarization=true"
+```
+
+**Using Python:**
+```python
+import requests
+
+url = "http://localhost:8000/predict"
+files = {"audio": open("test_audio.wav", "rb")}
+data = {"use_diarization": False}
+
+response = requests.post(url, files=files, data=data)
+print(response.json())
+```
+
+## Instructions
+
+### Training Workflow
+
+**Note:** The FastAPI server ([app.py](api/app.py)) imports `AudioClassifier` from  [predict_audio.py](scripts/predict_audio.py) at startup, so ensure training is completed before starting the server.
+
+1. **Extract Features** - Run [feature_extractor.py](scripts/feature_extractor.py):
+   ```bash
+   python -m scripts.feature_extractor
+   ```
+   This extracts TKAN features from the audio dataset and saves:
+   - `data/features.npy` - Extracted feature vectors
+   - `data/labels.npy` - Corresponding labels (real/fake)
+
+2. **Train Classifier** - Run [train_classifier.py](scripts/train_classifier.py):
+   ```bash
+   python -m scripts.train_classifier
+   ```
+   This trains the binary classifier and saves:
+   - `data/trained_model.pth` - Trained model weights
+   - `data/feature_scaler.pkl` - Feature normalization scaler
+
+3. **Test Prediction** - Run [main.py](scripts/main.py):
+   ```bash
+   python -m scripts.main
+   ```
+   This is the entry point that calls [predict_audio.py](scripts/predict_audio.py) for audio classification using the trained model.
+
+### Optional Training Scripts
+
+These scripts provide additional functionality for model evaluation and hyperparameter tuning:
+
+- **Batch Testing** - [run_test.py](scripts/run_test.py) (optional):
+  ```bash
+  python scripts/run_test.py
+  ```
+  Runs batch evaluation on audio files in `test_data/` directory and generates accuracy metrics and confusion matrix.
+
+- **K-Fold Cross-Validation** - [train_classifier_kfold.py](scripts/train_classifier_kfold.py) (optional):
+  ```bash
+  python -m scripts.train_classifier_kfold
+  ```
+  Performs K-fold cross-validation (default: 10 folds) to evaluate model performance with multiple train/validation splits.
+
+- **Hyperparameter Grid Search** - [train_gridsearch.py](scripts/train_gridsearch.py) (optional):
+  ```bash
+  python -m scripts.train_gridsearch
+  ```
+  Searches through hyperparameter combinations to find optimal settings. Results can be used to update [train_classifier.py](scripts/train_classifier.py).
+
+### GPU Support
+
+- **CUDA required**: Install CUDA 12.8 for GPU acceleration
+- **Automatic detection**: The system automatically uses GPU if available
+- **CPU fallback**: Works on CPU but significantly slower
+
+### Model Files
+
+The following files must be present in the `data/` directory before running the API server:
+- `trained_model.pth` - Trained classifier weights
+- `feature_scaler.pkl` - Feature normalization scaler
+- `features.npy` - Cached feature vectors (optional, for retraining)
+- `labels.npy` - Cached labels (optional, for retraining)
+
+### Audio Format Support
+
+The API automatically converts all supported formats to WAV (16kHz, mono, 16-bit) for processing:
+- Input: WAV, MP3, WEBM, OGG, M4A, FLAC, OPUS, AAC
+- Internal: Converted to WAV format
+- No manual conversion needed
+
+## License
+
+This project uses models with specific licensing requirements:
+- PyAnnote models: [MIT License](https://github.com/pyannote/pyannote-audio/blob/develop/LICENSE)
+- Individual model licenses on HuggingFace
+
+## Citations
+- Hervé Bredin, Ruiqing Yin, Juan Manuel Coria, Gregory Gelly, Pavel Korshunov, Marvin Lavechin, Diego Fustes, Hadrien Titeux, Wassim Bouaziz, and Marie-Philippe Gill. 2020. pyannote.audio: neural building blocks for speaker diarization. In ICASSP 2020, IEEE International Conference on Acoustics, Speech, and Signal Processing, Barcelona, Spain.
+
+- Juan M. Coria, Hervé Bredin, Sahar Ghannay, and Sophie Rosset. 2020. A Comparison of Metric Learning Loss Functions for End-To-End Speaker Verification. In Statistical Language and Speech Processing, Springer International Publishing, 137–148.
+
+- Alexis Plaquet and Hervé Bredin. 2023. Powerset multi-class cross entropy loss for neural speaker diarization. In Proc. INTERSPEECH 2023.
+
+- Hervé Bredin. 2023. pyannote.audio 2.1 speaker diarization pipeline: principle, benchmark, and recipe. In Proc. INTERSPEECH 2023.
+
+- Nicolas M Müller, Pavel Czempin, Franziska Dieckmann, Adam Froghyar, and Konstantin Böttinger. 2022. Does audio deepfake detection generalize? Interspeech (2022).
