@@ -1,4 +1,4 @@
-# Detect AudioFake Chrome Extension
+# SoundSentry Chrome Extension
 
 ## Description
 
@@ -7,3 +7,4 @@
 2. Select ```load_unpacked``` and load in this repo's root folder.
 3. Refresh, add and pin the extension to your chrome browser
 4. Start using the extension to detect audio fakes!
+

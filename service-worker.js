@@ -125,7 +125,7 @@ class AudioProcessor {
 
             // Build metadata for visualisation handling (maybe)
             const metadata = {
-                framecount: 0, // TODO
+                framecount: 0,
                 duration: duration,
                 startTime: timestamp,
                 endTime: timestamp + duration,
@@ -152,7 +152,7 @@ class AudioProcessor {
             this.sendProcessingError(port, errorMsg); // or send an error if failed.
         }
     }
-    // Creates a record of the latest data. We can use this later to save to session storage. TODO: need to think of how to do this efficiently. After every chunk is handled?
+    // Creates a record of the latest data. We can use this later to save to session storage.
     setLatestData(data, metadata, chunkVideoTitle, chunkVideoUrl) {
         this.latestAudioData = data;
         this.latestAudioMetadata = metadata;
@@ -210,7 +210,7 @@ class AudioProcessor {
     // API COMMUNICATION
     // ============================================
     async sendToASRService(blob) {
-        const API_ENDPOINT = 'http://ec2-18-138-11-139.ap-southeast-1.compute.amazonaws.com:8080/predict'; // Change this to actual API endpoint later
+        const API_ENDPOINT = ''; // Change this to actual API endpoint
 
         this.currentRecordingSessionChunksProcessed++;
 

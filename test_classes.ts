@@ -1,7 +1,6 @@
 // TYPE DEFINITIONS
 interface ProcessedAudioData {
     // Depends on API return format
-    // TODO - fill in when API finalised
     // current fields are placeholders for mocking
     decision: string,
     confidence: number,

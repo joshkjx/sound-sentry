@@ -40,7 +40,6 @@ type ContentScriptMessage = AudioChunkMessage;
 
 interface ProcessedAudioData {
     // Depends on API return format
-    // TODO - fill in when API finalised
     // current fields are placeholders for mocking
     decision: string,
     confidence: number,
@@ -183,7 +182,7 @@ class AudioProcessor {
             }
 
             const metadata = {
-                framecount: 0, // TODO
+                framecount: 0,
                 duration: duration,
                 startTime: timestamp,
                 endTime: timestamp + duration,
@@ -204,7 +203,7 @@ class AudioProcessor {
         }
     }
 
-    // Creates a record of the latest data. We can use this later to save to session storage. TODO: need to think of how to do this efficiently. After every chunk is handled?
+    // Creates a record of the latest data. We can use this later to save to session storage.
     private setLatestData(data:ProcessedAudioData, metadata:AudioMetadata, chunkVideoTitle?: string | null, chunkVideoUrl?: string | null){
         this.latestAudioData = data;
         this.latestAudioMetadata = metadata;
@@ -236,9 +235,6 @@ class AudioProcessor {
 
 
     private async sendToASRService(blob: Blob): Promise<ProcessedAudioData> {
-        // TODO: Convert blob to format needed by API
-        // TODO: Make HTTP request to ASR endpoint
-        // TODO: Parse and return response
 
         if (this.testingMode){ // Uses Mock Api if testing mode, otherwise falls back to API gateway.
             return this.testingUtil.getResponse(blob);
