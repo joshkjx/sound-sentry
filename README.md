@@ -22,4 +22,4 @@ The system builds on the DeepSonar framework, and has been adapted with with reg
 5. Start using the extension to detect audio fakes!
 
 ## Miscellaneous
-- Refer to README in ```back_end``` for more information on our architecture.
+- Refer to README in ```back_end``` folder for more information on our architecture.
