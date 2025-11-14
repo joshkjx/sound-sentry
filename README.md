@@ -22,5 +22,5 @@ The system builds on the DeepSonar framework, and has been adapted with with reg
 5. Start using the extension to detect audio fakes!
 
 ## Miscellaneous
-- ```const API_ENDPOINT``` is current disabled in ```service-worker.js```, contact owners for URL. 
+- ```const API_ENDPOINT``` is current disabled in ```service-worker.js```, contact owners for URL or replace with localhost instance. 
 - Refer to README in ```back_end``` folder for more information on our architecture.
