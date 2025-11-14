@@ -1,7 +1,6 @@
 # SoundSentry Chrome Extension
 Authors:
 Angel Lee Xuan Xuan, Joshua Koh Jun Xiang, Yeo Zhuan Yu, Yim Sohyun
-School of Computing, National University of Singapore
 
 ## Overview
 SoundSentry is a lightweight Chrome extension that performs real-time detection of AI-generated speech in Youtube videos. Designed to protect users from synthetic audio misinformation, SoundSentry allows for accessible deployment directly in the Chrome browser.
